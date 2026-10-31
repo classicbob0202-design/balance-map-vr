@@ -1,0 +1,2461 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>달러 자금 대차대조표 지도</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* 레이아웃: 전면 캔버스 위에 좌측 조작 패널과 우측 T-계정 패널이 떠 있는 계기판 구조 */
+:root{
+  --bg:#0B0F17;
+  --panel:#121826;
+  --edge:#1F2838;
+  --fg:#E6EAF2;
+  --muted:#8792A8;
+  --dim:#5A6478;
+  --dr:#7DD3C0;        /* 차변 — 보유하는 것 */
+  --cr:#E8795A;        /* 대변 — 눌리는 것 */
+  --fed:#A78BFA;
+  --tsy:#D4B36A;
+  --shock:#FF5C5C;
+  --sans:'IBM Plex Sans KR','Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);overflow:hidden}
+canvas{display:block;position:fixed;inset:0;touch-action:none;cursor:grab}
+canvas.drag{cursor:grabbing}
+#gl{pointer-events:none;z-index:0}
+#cv{z-index:1}
+
+.panel{
+  position:fixed;z-index:5;
+  background:rgba(18,24,38,.93);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid var(--edge);border-radius:10px;
+}
+.ttl{font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+
+#ctrl{top:14px;left:0;width:248px;padding:14px;
+  margin-left:max(14px,env(safe-area-inset-left,0px));
+  max-height:calc(100% - 28px);overflow-y:auto}
+#ctrl h1{font-size:15px;font-weight:700;margin:0 0 3px;letter-spacing:-.02em}
+#ctrl .lede{font-size:11px;line-height:1.5;color:var(--muted);margin:0 0 14px;word-break:keep-all}
+.grp{margin-bottom:13px}
+.grp>.ttl{display:block;margin-bottom:6px}
+
+button{
+  font-family:inherit;font-size:11.5px;color:var(--fg);
+  background:#1A2231;border:1px solid var(--edge);border-radius:6px;
+  padding:7px 9px;cursor:pointer;width:100%;text-align:left;
+  transition:background .15s,border-color .15s;
+}
+button:hover{background:#222C3E}
+button:focus-visible{outline:2px solid var(--fed);outline-offset:1px}
+button.on{background:#243049;border-color:#3A4A6B}
+.row{display:flex;gap:5px}
+.row button{text-align:center}
+
+.sideBtn{position:relative;padding-left:22px}
+.sideBtn::before{content:"";position:absolute;left:8px;top:50%;transform:translateY(-50%);
+  width:7px;height:7px;border-radius:2px}
+#bDr::before{background:var(--dr)}
+#bCr::before{background:var(--cr)}
+#bDr.on{border-color:var(--dr)}
+#bCr.on{border-color:var(--cr)}
+
+#fire{background:#3A1518;border-color:#6B2429;color:#FFB4B4;font-weight:600;text-align:center}
+#fire:hover{background:#4A1A1E}
+#fire:disabled{opacity:.35;cursor:default;background:#1A2231;color:var(--dim);border-color:var(--edge)}
+
+.leg{font-size:10px;line-height:1.8;color:var(--muted)}
+.leg i{display:inline-block;width:16px;height:0;vertical-align:middle;margin-right:6px;border-top-width:2px}
+.leg .s{border-top-style:solid;border-color:#6C8FB8}
+.leg .d{border-top-style:dashed;border-color:#4A5568}
+.leg b{font-weight:500;color:var(--fg)}
+.leg .x{width:10px;height:8px;border:1px dashed #9AB0D4;border-radius:1px;margin-right:8px;margin-left:3px}
+.sm{display:none}
+.foot{font-size:10px;line-height:1.5;color:var(--dim);margin:2px 0 0;word-break:keep-all}
+.ext{display:inline-block;font-size:9.5px;padding:2px 6px;border-radius:3px;margin:0 0 10px;
+  border:1px dashed #5A6B88;color:#AEB9CC}
+.ihead{display:flex;align-items:flex-start;gap:8px}
+.ihead>div{flex:1;min-width:0}
+.more{display:none}
+#mtrace{display:none}
+.xb{border-color:#7A6A44;color:#D4B36A}
+.xrow{margin-bottom:10px}
+.xrow .ttl{display:block;margin-bottom:3px;color:#9C8A63}
+.xrow p{font-size:11.5px;line-height:1.55;margin:0;color:#C8D0DE;word-break:keep-all}
+.xrow p b{color:#F0E2BF;font-weight:500}
+.xrow .mono{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.xn{display:inline-block;font-size:10.5px;padding:1px 6px;margin:0 2px 3px 0;border-radius:3px;border:1px dotted #7A6A44;color:#C8B88E}
+.xn.on{background:rgba(240,206,128,.18);color:#F7DFA6;border-style:solid}
+.xn.wk{color:#E2C47E;border-style:dashed}
+.xout{color:#C8B88E}
+.xout b{color:#F0CE80!important}
+.leg .e{border-top:2px dotted #D4B36A}
+
+#info{top:14px;right:0;width:286px;padding:14px;
+  margin-right:max(14px,env(safe-area-inset-right,0px));
+  max-height:calc(100% - 28px);overflow-y:auto}
+#info h2{font-size:15px;font-weight:700;margin:0 0 1px;letter-spacing:-.02em}
+#info .sub{font-size:10.5px;color:var(--muted);margin:0 0 12px}
+
+.tacct{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--edge);
+  border:1px solid var(--edge);border-radius:7px;overflow:hidden;margin-bottom:12px}
+.tcol{background:#0E1420;padding:9px 10px;min-width:0}
+.tcol h3{font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  margin:0 0 7px;padding-bottom:5px;border-bottom:1px solid #1C2434}
+.tcol.dr h3{color:var(--dr)}
+.tcol.cr h3{color:var(--cr)}
+.tcol ul{margin:0;padding:0;list-style:none}
+.tcol li{font-size:11px;line-height:1.45;color:#C8D0DE;margin-bottom:5px;
+  padding-left:9px;position:relative;word-break:keep-all}
+.tcol li::before{content:"";position:absolute;left:0;top:7px;width:3px;height:3px;
+  border-radius:50%;background:currentColor;opacity:.5}
+.tcol.hot{background:#1C1013}
+.tcol.hot h3{color:var(--shock)}
+
+.lim{border-left:2px solid var(--edge);padding-left:10px;margin-bottom:12px}
+.lim .ttl{display:block;margin-bottom:4px}
+.lim p{font-size:11.5px;line-height:1.5;margin:0 0 4px;color:#C8D0DE;word-break:keep-all}
+.grade{display:inline-block;font-size:9.5px;font-family:var(--mono);padding:2px 6px;border-radius:3px}
+.g-exact{background:#15302A;color:#6FD9BE}
+.g-meas{background:#2A2A14;color:#D4C76A}
+.g-none{background:#2E1A1A;color:#E09090}
+#note{font-size:11px;line-height:1.55;color:var(--muted);word-break:keep-all}
+#note b{color:#C8D0DE;font-weight:500}
+
+#trace{left:50%;bottom:0;transform:translateX(-50%);
+  margin-bottom:max(14px,env(safe-area-inset-bottom,0px));
+  max-width:min(640px,calc(100vw - 32px));padding:11px 14px;display:none}
+#trace.show{display:block}
+#trace .ttl{display:block;margin-bottom:7px}
+#trace ol{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:5px 0;align-items:center}
+#trace li{font-size:11px;display:flex;align-items:center;gap:6px}
+#trace li+li::before{content:"→";color:var(--dim);margin-right:6px;font-size:10px}
+#trace .n{font-weight:500}
+#trace .sd{font-family:var(--mono);font-size:9.5px;padding:1px 4px;border-radius:3px}
+#trace .sd.dr{background:#15302A;color:var(--dr)}
+#trace .sd.cr{background:#2E1A16;color:var(--cr)}
+#trace li.weak{opacity:.5}
+#trace li.pend,#mtrace li.pend{opacity:.18}
+#trace li.lit .n,#mtrace li.lit .n{animation:litflash .9s ease-out}
+@keyframes litflash{0%{color:#fff;text-shadow:0 0 10px #FF5C5C,0 0 2px #fff}35%{color:#FFB4B4;text-shadow:0 0 8px #FF5C5C}100%{color:inherit;text-shadow:none}}
+#trace .end{font-size:10.5px;color:var(--muted);margin-top:8px;line-height:1.55;word-break:keep-all}
+#trace .end b{color:#C8D0DE;font-weight:500}
+
+/* 모바일: 위는 한 줄 조작 막대, 아래는 접히는 시트. 지도는 그 사이 빈 곳에 맞춘다 */
+@media (max-width:880px){
+  #ctrl,#info{position:fixed;width:auto;left:0;right:0;
+    margin-left:max(8px,env(safe-area-inset-left,0px));
+    margin-right:max(8px,env(safe-area-inset-right,0px))}
+  #ctrl{top:max(8px,env(safe-area-inset-top,0px));padding:9px 10px 8px;max-height:none;overflow:visible;
+    display:flex;flex-wrap:wrap;gap:6px;align-items:stretch}
+  #ctrl h1{width:100%;font-size:13.5px;margin:0}
+  #ctrl .lede,#ctrl .g-hint,#ctrl .foot{display:none}
+  #ctrl .grp{margin:0}
+  #ctrl .grp>.ttl{display:none}
+  .g-side{flex:1.7}.g-fire{flex:1.1}.g-fed{flex:1.15}.g-cam{display:none}
+  .g-side .row,.g-fire button,.g-fed button{height:34px}
+  #ctrl button{padding:6px 7px;font-size:11.5px;text-align:center}
+  .sideBtn{padding-left:18px!important}
+  .sideBtn::before{left:6px}
+  .lg{display:none}.sm{display:inline}
+  .g-leg{width:100%}
+  .leg{line-height:1.3;display:flex;flex-wrap:wrap;gap:2px 12px}
+  .leg br{display:none}
+  .leg i{width:12px;margin-right:4px}
+
+  #info{top:auto;bottom:0;margin-bottom:max(8px,env(safe-area-inset-bottom,0px));
+    padding:10px 12px;max-height:56%}
+  #info .sub{margin:0}
+  .more{display:block;flex:none;width:auto;padding:5px 9px;font-size:11px;color:var(--muted)}
+  #info:not(.open) .ibody{display:none}
+  #info.open .ibody{margin-top:10px}
+  #mtrace{display:block}
+  #mtrace:empty{display:none}
+  #trace{display:none!important}
+}
+@media (max-width:880px) and (max-height:520px){
+  #ctrl .g-leg{display:none}
+}
+#mtrace{margin-top:8px;padding-top:8px;border-top:1px solid var(--edge)}
+#mtrace ol{margin:0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:4px 0;align-items:center}
+#mtrace li{font-size:10.5px;display:flex;align-items:center;gap:4px}
+#mtrace li+li::before{content:"→";color:var(--dim);margin:0 5px;font-size:9.5px}
+#mtrace .sd{font-family:var(--mono);font-size:9px;padding:1px 3px;border-radius:3px}
+#mtrace .sd.dr{background:#15302A;color:var(--dr)}
+#mtrace .sd.cr{background:#2E1A16;color:var(--cr)}
+#mtrace li.weak{opacity:.5}
+#mtrace .mend{font-size:10.5px;line-height:1.5;color:var(--muted);margin-top:6px;word-break:keep-all}
+#mtrace .mend b{color:#C8D0DE;font-weight:500}
+#info:not(.open) #mtrace .mend{display:none}
+/* v8 — 시나리오(왼쪽) · 파급 설명(오른쪽) */
+.scl{display:flex;flex-direction:column;gap:4px}
+.scb{display:flex;gap:7px;align-items:baseline;padding:6px 8px}
+.scb .k{font-family:var(--mono);font-size:9.5px;color:var(--dim);min-width:30px}
+.scb.on{background:#2A1A1E;border-color:#6B2429}
+.scb.on .k{color:#FFB4B4}
+.scb.nm.on{background:#15302A;border-color:#2F6B5C}
+.scb.nm.on .k{color:#7DD3C0}
+#scSel{display:none}
+.scard{margin-top:8px;padding:9px 10px;border-radius:7px;background:#0E1420;border:1px solid var(--edge)}
+.scard h4{margin:0 0 3px;font-size:12px;font-weight:600}
+.scard .kind{font-size:10px;color:#FFB4B4;margin-bottom:6px}
+.scard.nm .kind{color:#7DD3C0}
+.scard p{font-size:10.5px;line-height:1.5;color:#C8D0DE;margin:0 0 5px;word-break:keep-all}
+.scard .note{color:var(--muted);font-size:10px;margin:0}
+details.cust>summary{cursor:pointer;font-size:10px;font-weight:600;letter-spacing:.09em;color:var(--dim);list-style:none;margin-bottom:6px}
+details.cust>summary::before{content:'▸ ';}
+details.cust[open]>summary::before{content:'▾ ';}
+.story{list-style:none;margin:0;padding:0;counter-reset:st}
+.story li{position:relative;padding:7px 0 7px 26px;border-top:1px solid #1A2232;font-size:11.5px;line-height:1.5;color:#C8D0DE;word-break:keep-all}
+.story li:first-child{border-top:none}
+.story li::before{counter-increment:st;content:counter(st);position:absolute;left:0;top:8px;width:18px;height:18px;border-radius:50%;
+  background:#1A2231;color:var(--muted);font:600 10px/18px var(--mono);text-align:center}
+.story li.sub{padding-left:26px;color:#AEB7C7;font-size:11px}
+.story li.sub::before{content:'↕';counter-increment:none;background:none;color:var(--dim)}
+.story li.new{animation:stnew 1.4s ease-out}
+.story li.new::before{background:#FF5C5C;color:#fff;box-shadow:0 0 10px #FF5C5C}
+@keyframes stnew{0%{background:rgba(255,92,92,.22)}100%{background:transparent}}
+.story .hd{display:block;font-weight:600;color:#E6EAF2;margin-bottom:2px}
+.story .hd .sd{font-family:var(--mono);font-size:9.5px;padding:1px 4px;border-radius:3px;margin-left:3px}
+.story .sd.dr{background:#15302A;color:var(--dr)}.story .sd.cr{background:#2E1A16;color:var(--cr)}
+.story .tg{display:inline-block;font-size:9.5px;padding:1px 5px;border-radius:3px;margin-left:5px;vertical-align:1px}
+.tg.id{background:#16243A;color:#9CC0EA}.tg.bh{background:#22252C;color:#AEB7C7;border:1px dashed #4A5568}
+.tg.fd{background:#211B3A;color:#C4B5FD}.tg.x{background:#2A2414;color:#E2C47E}.tg.sh{background:#3A1518;color:#FFB4B4}
+.story li.weak .hd{color:#B8C0CE}
+.story .rw{display:block;margin-top:3px;padding-left:40px;text-indent:-40px}
+.story .rw i{font-style:normal;display:inline-block;width:34px;margin-right:6px;font-size:9.5px;color:var(--dim);text-indent:0;letter-spacing:.04em}
+.story .rw.ev{color:var(--muted);font-size:10.5px}
+.story li.sum{background:rgba(212,179,106,.05);border-radius:6px;padding-right:6px}
+.story li.sum::before{content:'∑';background:#4A3D1C;color:#F0CE80}
+@media (min-width:881px){#info{width:332px}}
+.story li.fedl::before{background:#3B2F6B;color:#E0D7FF}
+.story li.xl::before{background:#4A3D1C;color:#F0CE80}
+.back{font-size:10.5px;padding:5px 8px;width:auto;margin-bottom:8px}
+.stwait{font-size:10.5px;color:var(--dim);padding:6px 0 0 26px}
+@media (max-width:880px){
+  .g-scen{display:none}
+  #scSel{display:block;width:100%;font:inherit;font-size:12px;color:var(--fg);background:#1A2231;border:1px solid var(--edge);border-radius:6px;padding:6px 8px;height:34px}
+  .g-scsel{width:100%}
+  details.cust{display:contents}
+  details.cust>summary{display:none}
+}
+#bVR{border-color:#4A6A93;color:#CFE0F7}
+#bVR:disabled{opacity:.45;cursor:not-allowed}
+#vrNote{margin:6px 0 0;font-size:10.5px;line-height:1.5;color:var(--muted)}
+@media (max-width:880px){ .g-vr #vrNote{display:none} }
+/* v11 — 2층 거시 타일 (4단계 표현, 91 v1.5 §4-6) */
+.leg .m{border-top:2px dashed #7CC4D8;border-image:repeating-linear-gradient(90deg,#7CC4D8 0 6px,transparent 6px 8px,#7CC4D8 8px 9px,transparent 9px 11px) 1}
+.mb{border-color:#3F6C7A;color:#9FD6E6}
+.mrow{margin-bottom:10px}
+.mrow .ttl{display:block;margin-bottom:3px;color:#6FA3B3}
+.mrow p{font-size:11.5px;line-height:1.55;margin:0;color:#C8D0DE;word-break:keep-all}
+.mrow p b{color:#D9F1F8;font-weight:500}
+.mtog{display:flex;gap:4px;margin:0 0 8px}
+.mtog button{width:auto;flex:1;text-align:center;padding:5px 6px;font-size:10.5px}
+.mtog button.on{background:#183543;border-color:#3F6C7A;color:#D9F1F8}
+.mchart{display:block;width:100%;height:auto;margin:0 0 2px}
+.mlab{display:flex;justify-content:space-between;gap:6px;font-size:10.5px;color:#C8D0DE;margin-top:6px}
+.mlab span:last-child{font-family:var(--mono);color:var(--muted);white-space:nowrap}
+.mlab .sig{color:#FFD08A}
+.mfix{margin-top:10px;padding-top:8px;border-top:1px solid var(--edge);font-size:10px;line-height:1.5;color:var(--dim);word-break:keep-all}
+.mfix b{color:#9FD6E6;font-weight:500}
+.q1t{width:100%;border-collapse:collapse;font-size:10.5px;margin-top:2px}
+.q1t td{padding:2px 0;color:#C8D0DE;vertical-align:top}
+.q1t td:last-child{font-family:var(--mono);color:var(--muted);text-align:right;white-space:nowrap;padding-left:6px}
+#l2badge{position:fixed;z-index:4;left:0;bottom:0;margin-left:max(14px,env(safe-area-inset-left,0px));margin-bottom:max(14px,env(safe-area-inset-bottom,0px));
+  padding:5px 9px;font-size:10px;color:#9FD6E6;background:rgba(14,26,32,.88);border:1px solid #2C4C57;border-radius:6px;pointer-events:none}
+@media (min-width:881px){ #ctrl{max-height:calc(100% - 64px)} }
+@media (max-width:880px){ #l2badge{display:none} }
+/* v12 — 현재 위험 층 (부록 117, 기준일 2026-10-26) */
+.leg .r{width:10px;height:8px;border:1px dashed #E58FC9;border-radius:1px;margin-right:8px;margin-left:3px}
+.ext.rk{border-color:#8E4C78;color:#F2B8DD}
+.rrow{margin-bottom:10px}
+.rrow .ttl{display:block;margin-bottom:3px;color:#B9739F}
+.rrow p{font-size:11.5px;line-height:1.55;margin:0;color:#C8D0DE;word-break:keep-all}
+.rrow p b{color:#F6D6EA;font-weight:500}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+</style>
+
+<canvas id="gl" aria-hidden="true"></canvas>
+<canvas id="cv"></canvas>
+
+<div class="panel" id="ctrl">
+  <h1>달러 자금 대차대조표 지도</h1>
+  <p class="lede">내 차변은 누군가의 대변이다. 충격은 한쪽 면에 들어와 맞물린 면으로 건너간다.</p>
+
+  <div class="grp g-scen">
+    <span class="ttl">시나리오 — 어떤 충격인가</span>
+    <div class="scl" id="scList"></div>
+    <div id="scCard"></div>
+  </div>
+  <div class="grp g-scsel"><select id="scSel" aria-label="시나리오"></select></div>
+
+  <details class="grp cust" id="cust"><summary>직접 고르기 — 아무 노드·면에</summary>
+  <div class="grp g-hint">
+    <span class="ttl">1 · 충격 지점</span>
+    <div id="hint" style="font-size:11px;color:var(--muted);line-height:1.45">노드를 클릭해서 고릅니다.</div>
+  </div>
+
+  <div class="grp g-side">
+    <span class="ttl">2 · 어느 면에</span>
+    <div class="row">
+      <button id="bDr" class="sideBtn">차변</button>
+      <button id="bCr" class="sideBtn on">대변</button>
+    </div>
+  </div>
+
+  <div class="grp g-fire"><button id="fire" disabled>충격 주입</button></div>
+  </details>
+
+  <div class="grp g-fed">
+    <span class="ttl">3 · 연준 백스톱</span>
+    <button id="bFed"><span class="lg">연결 보기 — </span><span class="sm">백스톱 </span><span id="fedState">꺼짐</span></button>
+  </div>
+
+  <div class="grp g-cam"><button id="bCam" class="on">카메라 따라가기 — 켜짐</button></div>
+
+  <div class="grp g-vr" id="gVR" hidden>
+    <span class="ttl">헤드셋 VR</span>
+    <button id="bVR">헤드셋으로 들어가기</button>
+    <p id="vrNote"></p>
+  </div>
+
+  <div class="grp g-leg">
+    <span class="ttl">읽는 법</span>
+    <div class="leg">
+      <span class="li"><i class="s"></i><b>항등식</b><span class="lg"> — 내 자산 = 네 부채</span></span><br>
+      <span class="li"><i class="d"></i><b>행동 경로</b><span class="lg"> — 팔 수도, 안 팔 수도</span></span><br>
+      <span class="li"><i class="x"></i><b>점선 테두리</b> — 원고 밖<span class="lg">, 해설용</span></span><br>
+      <span class="li"><i class="e"></i><b>출구</b><span class="lg"> — 아래층 변수, 연결은 [가설]</span></span><br>
+      <span class="li"><i class="m"></i><b>추정 연결</b><span class="lg"> — 2층 거시 타일, 예측력 ≠ 인과</span></span><br>
+      <span class="li"><i class="r"></i><b>현재 위험</b><span class="lg"> — 분홍 점선, 기준일 2026-10-26 · [가설]</span></span><br>
+      <span class="lg"><b>◎ 떠 있는 기호</b> — 주체 유형 표시 (기업 로고 아님)</span><br>
+      <span class="lg"><span style="color:var(--dr)">▮</span> 차변 ·
+      <span style="color:var(--cr)">▮</span> 대변 · 드래그로 회전</span>
+    </div>
+  </div>
+
+  <p class="foot">해설·탐색용. 원고의 그림 3-1(연결도 v1.2)이 아니며, 원고가 입증한 것보다 넓게 그린다. 분홍 점선 노드는 부록 117(현재 위험) — 사례 판정이 아니다.</p>
+</div>
+
+<div class="panel" id="info"></div>
+<div id="l2badge">2층 · 빈티지 2026-10-24 · 표본 2013-04~2026-09 · <b>예측력 ≠ 인과</b></div>
+
+<div class="panel" id="trace">
+  <span class="ttl">전파 경로</span>
+  <ol id="traceList"></ol>
+  <div class="end" id="traceEnd"></div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ══════════ 데이터 ══════════ */
+const NODES = {
+  fed:{ icon:'fed', name:'연준', sub:'최종 흡수자', pos:[0,58,0], tone:'#A78BFA',
+    dr:['국채 보유 (매입)','스왑라인 대출','repo 대출','BTFP 대출'],
+    cr:['준비금','역레포','유통 화폐'], limit:null,
+    note:'다른 주체의 제약을 <b>자기 대차대조표로 옮겨</b> 받는 자리. 위에 둔 것은 배치가 아니라 구조다 — 연준만 부채를 발행해 자산을 받을 수 있다.'},
+  mmf:{ icon:'coins', name:'prime MMF', sub:'현금 공급', pos:[-74,22,10], tone:'#7DD3C0',
+    dr:['CP · CD','역레포 (딜러에 대출)','T-bill'], cr:['투자자 지분 — 즉시 환매'],
+    limit:{t:'WLA 30% 게이트 조항',g:'exact',
+      d:'주간 유동자산이 30% 밑으로 내려가면 환매를 막을 수 있었다. 2016년 도입, 2023년 삭제. 30%에 가까워질수록 환매가 빨라졌다 — 거리 1σ 감소에 일별 유출 +1%p.'},
+    note:'대변은 <b>하루 만에 사라질 수 있고</b> 차변은 그만큼 빨리 줄지 않는다. 그 간극이 이 노드의 전부다.'},
+  foreign:{ icon:'globe', name:'해외', sub:'비미국 은행 · 외환당국', pos:[-74,-20,-14], tone:'#7DD3C0',
+    dr:['달러 자산 (국채 포함)','자국 통화 자산'], cr:['단기 달러 부채 (CP·CD)','준비금 운용 의무'],
+    limit:{t:'통화 불일치 · 스왑라인 접근성',g:'meas',
+      d:'달러 부채를 달러 수입 없이 진다. 스왑라인이 있으면 빌리고, 없으면 판다. 2020-03 그룹별 국채 순매수: 상설 −3.0% / 임시 −4.1% / 없음 −6.9% — 다만 기술통계다.'},
+    note:'2008년엔 <b>팔지 않고 빌렸고</b>(달러 자산 +$235bn), 2020년엔 <b>팔았다</b>(해외 순매도 약 $420bn, 절반 이상이 공식기관). 같은 자리, 다른 선택.'},
+  dealer:{ icon:'swap', name:'딜러', sub:'공통 노드', pos:[0,0,0], tone:'#FFFFFF',
+    dr:['국채 재고','고객 repo 대출','회사채 재고'], cr:['repo 차입','자기자본'],
+    limit:{t:'대차대조표 공간 · SLR · VaR · 위험한도',g:'none',
+      d:'제약이 있다는 것은 관측된다 — 2020-03 재고 $193.1bn → $271.8bn, 깊이 2월 대비 −93%. 그런데 <b>한계가 어디인지는 숫자가 없다.</b> 어느 값에서 멈췄는지 아무도 공개하지 않는다.'},
+    note:'원인이 다른 매도가 전부 이 한 대차대조표로 모인다. 들어오는 화살표는 회계가 보증하지만, <b>여기서 나가는 화살표는 전부 추론</b>이다.'},
+  hedgefund:{ icon:'lever', name:'레버리지 펀드', sub:'상대가치 거래', pos:[74,24,10], tone:'#9AB0D4',
+    dr:['국채 현물 롱 (베이시스)','MBS','스왑 스프레드 포지션'], cr:['repo 차입','증거금 의무 (VM · IM)'],
+    limit:{t:'헤어컷 · 변동증거금',g:'meas',
+      d:'VM은 손실의 현금 이전, IM은 새로 잠기는 담보. 2020-03 베이시스 거래자 하위집단에서 repo 차입 −17%, 만기 −9.12일. 비청산 repo의 약 70%가 헤어컷 0.'},
+    note:'국채 수요를 만드는 주체이면서 동시에 가장 먼저 사라지는 수요다. <b>이 노드는 딜러 대차대조표를 빌려 국채를 보유한다.</b>'},
+  bondfund:{ icon:'pie', name:'채권 뮤추얼펀드', sub:'일별 환매', pos:[78,-12,-6], tone:'#9AB0D4',
+    dr:['회사채','국채 (가장 유동적)'], cr:['투자자 지분 — 일별 환매'],
+    limit:{t:'유동성 불일치',g:'meas',
+      d:'즉시 환매 대 비유동 자산. 현금이 필요하면 <b>팔 수 있는 것부터</b> 판다 — 2020Q1 국채 순취득 −$236bn. 차입이 없어도 매도한다.'},
+    note:'레버리지 없이 투매에 가담하는 자리. 평소의 "유동성으로의 도피"가 <b>"유동성에서의 도피"</b>로 뒤집힌다.'},
+  ccp:{ icon:'hub', name:'CCP', sub:'FICC · 파생 청산', pos:[-40,-32,24], tone:'#9AB0D4', ext:true,
+    dr:['청산 회원에 대한 채권 (경개 후)','증거금 운용 자산'], cr:['청산 상대방에 대한 채무','회원 증거금 · 청산기금'],
+    limit:{t:'증거금 모형 — 변동성에 연동',g:'none',
+      d:'변동성이 오르면 증거금 요구가 오른다 — 방향은 모형의 규칙이다. 다만 원고는 CCP를 따로 분석하지 않았고, <b>얼마나 올랐는지 숫자를 갖고 있지 않다.</b>'},
+    note:'경개(novation)로 양쪽 모두의 거래 상대가 된다. 그래서 <b>차변과 대변이 거의 같은 크기로 맞물린다.</b> 자기 위험을 줄이려는 증거금 상향이 회원에게는 현금 수요가 된다.'},
+  pension:{ icon:'shield', name:'보험사 · 연기금', sub:'장기 자산 보유', pos:[44,-60,26], tone:'#9AB0D4', ext:true,
+    dr:['장기 국채 · 회사채','금리스왑 (고정 수취)'], cr:['장기 보험 · 연금 부채','파생 증거금 의무'],
+    limit:{t:'파생 증거금 — 금리 상승 시 현금 요구',g:'none',
+      d:'금리가 오르면 고정 수취 스왑에 변동증거금이 붙고, 현금을 만들려면 장기물을 판다. 원고는 이 고리를 <b>C04(영국 LDI · 길트)</b>에서 부분 자기강화로 판정했다. 미국 쪽 같은 자리는 원고에서 다루지 않았다.'},
+    note:'부채 듀레이션이 길어 <b>평소엔 가장 느린 보유자</b>다. 그런데 듀레이션을 파생으로 맞추면 금리 충격이 현금 수요로 바뀌고, 매도가 부채가 아니라 <b>증거금 쪽에서</b> 나온다.'},
+  bank:{ icon:'vault', name:'은행', sub:'예금 조달', pos:[62,-46,-20], tone:'#9AB0D4',
+    dr:['국채 · MBS (AFS / HTM)','대출'], cr:['예금 — 비보험 비중','차입 (할인창구 · BTFP)'],
+    limit:{t:'미실현 손실 + 비보험 예금',g:'exact',
+      d:'금리가 오르면 차변에 미실현 손실이 쌓이고, 대변의 비보험 예금은 그것을 보고 나간다. SVB는 예금의 약 94%가 비보험(2022년 말 총예금 기준).'},
+    note:'2023-03에 이 고리는 <b>은행 한 곳 안에서 닫혔다</b> — 03-08 매각·손실 실현 → 03-09 유출 $40bn 초과. 그런데 국채는 오히려 샀다(2년물 −60bp).'},
+  treasury:{ icon:'bond', name:'재무부', sub:'국채 발행', pos:[-22,-64,-12], tone:'#D4B36A',
+    dr:['TGA 잔액'], cr:['국채 (순발행 ↑)'], limit:null,
+    note:'공급은 정책으로 정해진다. 질문은 "수요가 있나"가 아니라 <b>어느 대차대조표가 받아내며 그 주체가 어떤 제약을 지는가</b>이다 — 발행된 국채는 반드시 누군가의 차변에 앉는다.'},
+  /* v12 — 현재 위험 층 (부록 117, 기준일 2026-10-26). 모두 후보 · 연결은 [가설] · 원고 판정 아님 */
+  stable:{ icon:'token', name:'스테이블코인 발행사', sub:'L14 후보 · 현재 위험', pos:[-48,42,-30], tone:'#E58FC9', ext:true, risk:'L14',
+    dr:['T-bill','repo 대출 (국채 담보)','예금 · 현금'], cr:['달러 토큰 — 액면 상환 약속'],
+    limit:{t:'액면 상환 · 준비자산 규정 (GENIUS)',g:'exact',
+      d:'1:1 준비, <b>2영업일 안 상환</b>. OCC 최종 규칙(2026-10-21, 시행 2027-01-18): 일일 유동성 <b>5% 이상</b>, 단일 상대방 <b>40% 이하</b>, 주간 유동성·만기 요건은 <b>없다</b>(제안본의 30%·20일이 빠짐), 운영 백스톱 총비용 12개월분. 규칙은 정확하지만 런이 어디서 시작되는지 숫자는 없다.'},
+    rk:{st:'고리 후보 [가설] — L05①과 같은 대차대조표 모양',
+      obs:'BIS WP 1270(2026-06 개정): 5일간 35억 달러 유입 → 3개월물 즉시 −0.71bp, 10일 약 −4bp, 중개 스트레스 때 커진다. FRBSF 2026-26: 상위 2개 발행사의 국채+repo 보유가 5년간 약 2,000억 달러 증가.',
+      main:'평시엔 단기금리를 수 bp 움직이는 <b>수요자</b>. 런이 나면 딜러(L02)를 누르는 길은 T-bill 매도보다 <b>repo 회수</b>(딜러 조달 감소 — 항등식) 쪽이 직접적이다.',
+      sub:'준비자산이 CP·CD가 아니라 T-bill이라 스트레스 때 안전자산 수요가 받아 줄 수 있고, 상환 대금이 은행·정부 MMF로 돌아오면 <b>순</b>압력은 작다 → <b>동반 하락</b> 기본값.',
+      no:'유출 사건(Terra-Luna·FTX)은 그림으로 제시됐으나 <b>유출만 따로 추정한 값은 확인되지 않았다.</b> 장기물(ACM) 파급은 BIS에서 제한적이라 ACM 출구선을 긋지 않았다.'},
+    note:'대변은 액면 그대로 하루 이틀에 빠질 수 있고, 차변은 가장 안전한 단기국채다. <b>prime MMF와 같은 모양</b> — 다만 MMF와 달리 연준 백스톱(MMLF)에 해당하는 자리가 아직 없다.'},
+  cbdc:{ icon:'cbdc', name:'해외 CBDC', sub:'L15 후보 · 증폭 조건', pos:[-72,-58,22], tone:'#E58FC9', ext:true, risk:'L15',
+    dr:['중앙은행 자산'], cr:['디지털 유로 — 보유 한도·무이자 (2029 목표)','e-CNY — 2026-01부터 은행 예금 부채'],
+    limit:{t:'보유 한도 — 예금 이탈 속도의 차단',g:'none',
+      d:'디지털 유로는 1인 보유 한도를 둔다(3자 협상 중, 한도 수치 미정). e-CNY는 상업은행 예금이 되어 은행 밖으로 빠지는 통로가 아니다. <b>미국은 소매 CBDC가 없다</b> — 그 자리는 스테이블코인이다.'},
+    rk:{st:'증폭 조건 후보 — 효과 미검정 (L11과 같은 표기)',
+      obs:'유럽의회 협상 개시 2026-07-09(416·169·22), 첫 발행 2029 목표. mBridge 누적 3,872억 위안 중 e-CNY 약 95%(2025-11 말).',
+      main:'디지털 유로는 L06(예금 이탈)의 <b>속도를 높이는 조건</b>, 보유 한도가 그 차단(L12). e-CNY·mBridge는 달러망 밖 결제 — L08 수요 기반을 장기적으로 줄이는 방향.',
+      sub:'한도가 낮고 기업 보유가 막히면 SVB형(기업 예금) 이탈에는 영향이 거의 없다. mBridge 규모는 FX 거래량에 비해 미미하다. 거꾸로, 달러 버퍼를 덜 쥔 나라는 위기 때 더 급히 달러를 찾을 수 있다 — <b>방향 미정</b>.',
+      no:'고리가 아니다 — 행동하는 주체가 아니라 <b>조건</b>이다. 그래서 시나리오(충격 진입점)를 두지 않았다.'},
+    note:'같은 자리를 미국은 민간(스테이블코인), 유로·중국은 공공(CBDC)이 차지한다. 대차대조표로 보면 스테이블코인은 MMF, 디지털 유로는 한도 붙은 현금, e-CNY는 은행 예금 — <b>런 위험은 이 순서로 줄어든다.</b>'},
+  aicredit:{ icon:'chip', name:'AI 인프라 사모신용', sub:'L16 후보 · 현재 위험', pos:[48,40,-30], tone:'#E58FC9', ext:true, risk:'L16',
+    dr:['데이터센터·GPU 담보 대출','네오클라우드 대출'], cr:['반유동 펀드 지분 — 분기 환매','은행 신용한도 차입','보험사 출자'],
+    limit:{t:'분기 평가 · 환매 한도 · 빠른 담보 감가',g:'none',
+      d:'평가는 분기마다, 환매는 분기 약 5% 한도. 칩은 3–5년이면 쓸모가 준다(칼럼, C급). <b>대출 단위 자료는 없다</b> — 손실이 어디서 멈추는지 숫자가 없다.'},
+    rk:{st:'고리 후보 [가설] — L01(담보)+L05②(환매) 결합',
+      obs:'IMF GFSR 2026-10: AI 공개 거래 14건이 지분 3,000억 + 부외 포함 부채 6,500억 달러로 미래 수익 약정 1.4조 달러를 받음. FSB 2026-05: 사모신용 거래 중 AI 비중 2025년 34%(직전 5년 17%), 은행 신용한도 약 2,200억 달러(상업 자료는 2배 이상).',
+      main:'평가가 <b>늦게 한꺼번에</b> 드러나 먼저 빠져나갈 유인이 생긴다(FSB의 하향 나선 서술). 2층으로는 <b>EBP</b>로 간다.',
+      sub:'은행 직접 노출은 총자산의 0.5% 미만, IMF 스트레스 테스트에서도 은행권은 견딘다 → <b>사모시장 안에서 닫히는 고리</b>, 번지는 길은 보험사 출자와 <b>은행 약정 인출</b>(손실이 아니라 유동성 소모).',
+      no:'IMF·FSB의 되먹임 서술은 공식기관의 <b>[해석]</b>이다. 지도에선 [가설]로 둔다.'},
+    note:'공식기관이 스스로 되먹임을 서술한 유일한 후보지만, <b>자료가 가장 불투명</b>하다. 상장 BDC 가격 − NAV, 비상장 BDC 환매 공시로 경보만 볼 수 있고 판정은 할 수 없다.'}
+};
+
+const LINKS = [
+  {a:'mmf',as:'dr',b:'dealer',bs:'cr',k:'id'},
+  {a:'mmf',as:'dr',b:'foreign',bs:'cr',k:'id'},
+  {a:'dealer',as:'dr',b:'hedgefund',bs:'cr',k:'id'},
+  {a:'treasury',as:'cr',b:'dealer',bs:'dr',k:'id'},
+  {a:'dealer',as:'dr',b:'hedgefund',bs:'dr',k:'bh'},
+  {a:'dealer',as:'dr',b:'bondfund',bs:'dr',k:'bh'},
+  {a:'dealer',as:'dr',b:'bank',bs:'dr',k:'bh'},
+  {a:'dealer',as:'dr',b:'foreign',bs:'dr',k:'bh'},
+  {a:'bank',as:'cr',b:'fed',bs:'dr',k:'bh'},
+  /* v3 — 원고 범위 밖 노드 */
+  {a:'mmf',as:'dr',b:'ccp',bs:'cr',k:'id'},        /* 후원 repo — MMF 현금 대출을 CCP가 받는다 */
+  {a:'ccp',as:'dr',b:'dealer',bs:'cr',k:'id'},     /* 청산된 딜러 repo 차입 */
+  {a:'ccp',as:'cr',b:'hedgefund',bs:'cr',k:'bh'},  /* 증거금 상향 → 조달 압박 */
+  {a:'ccp',as:'cr',b:'pension',bs:'cr',k:'bh'},    /* 스왑 변동증거금 */
+  {a:'dealer',as:'dr',b:'pension',bs:'dr',k:'bh'}, /* 장기물 매도 → 딜러 재고 */
+  /* v12 — 현재 위험 층 (부록 117) */
+  {a:'treasury',as:'cr',b:'stable',bs:'dr',k:'id'},  /* 발행된 T-bill이 준비자산으로 */
+  {a:'stable',as:'dr',b:'dealer',bs:'cr',k:'id'},    /* 준비자산 repo 대출 = 딜러 repo 차입 */
+  {a:'dealer',as:'dr',b:'stable',bs:'dr',k:'bh'},    /* 상환 시 T-bill 매도 → 딜러 재고 */
+  {a:'cbdc',as:'cr',b:'foreign',bs:'cr',k:'bh',oneway:true}, /* 달러망 밖 결제 → 단기 달러 부채 수요 — 조건이라 한 방향만 */
+  {a:'bank',as:'dr',b:'aicredit',bs:'cr',k:'id'},    /* 은행 신용한도 = 펀드 차입 */
+  {a:'pension',as:'dr',b:'aicredit',bs:'cr',k:'id'}  /* 보험사 출자 = 펀드 지분 */
+];
+
+/* v8 — 링크마다 "왜 건너가는가" (같은 순서) */
+const LINK_WHY = [
+  {w:'MMF <b>역레포 대출 ↓</b> = 딜러 <b>repo 차입 ↓</b>', y:'같은 거래의 양면이다. 한쪽 장부에서 사라지면 다른 쪽 장부에서도 같은 크기로 사라진다.', e:'항등식 — 회계가 보증한다.'},
+  {w:'MMF <b>CP·CD 보유 ↓</b> = 비미국 은행 <b>단기 달러 부채 ↓</b>', y:'MMF가 만기에 다시 사 주지 않으면 해외 은행은 그 달러를 다른 곳에서 구해야 한다.', e:'항등식. 해외 쪽이 그다음 무엇을 하는지(빌리나 파나)는 행동이다.'},
+  {w:'딜러 <b>고객 repo 대출 ↓</b> = 레버리지 펀드 <b>repo 차입 ↓</b>', y:'딜러가 대차대조표를 줄이면 가장 먼저 줄이는 것이 고객에게 빌려주던 돈이다.', e:'항등식. 원고 C03: 베이시스 거래자 하위집단 repo 차입 −17%.'},
+  {w:'재무부 <b>국채 발행 ↑</b> = 딜러 <b>국채 재고 ↑</b>', y:'발행된 국채는 반드시 누군가의 차변에 앉는다. 최종 보유자가 사지 않은 몫은 입찰을 받친 딜러에게 남는다.', e:'항등식(입찰 배정분). 원고 C08: 레버리지 축적은 있었으나 고리는 켜지지 않음(NA).'},
+  {w:'레버리지 펀드 <b>국채 현물 매도</b> → 딜러 <b>재고 ↑</b>', y:'조달이 줄면 포지션을 줄여야 한다. 팔린 국채를 받아 주는 자리가 딜러 대차대조표다.', e:'행동 경로 — 지도에선 [가설]. 원고 C03: 청산은 관측, 증폭 기여는 미측정.'},
+  {w:'채권펀드 <b>국채 매도</b> → 딜러 <b>재고 ↑</b>', y:'환매 현금을 만들려고 <b>가장 팔기 쉬운 것부터</b> 판다. 레버리지가 없어도 매도에 가담한다.', e:'행동 경로. 원고: 2020Q1 채권펀드 국채 순취득 −$236bn.'},
+  {w:'은행 <b>증권 매도(또는 매입 축소)</b> → 딜러 <b>재고</b>', y:'예금이 빠지면 증권을 팔아 현금을 만들 수 있다. 그러나 2023-03에는 국채를 <b>오히려 샀다</b>.', e:'행동 경로 — 방향이 정해져 있지 않다. 원고 C05: 고리는 은행 한 곳 안에서만 닫힘.'},
+  {w:'해외 <b>미 국채 매도</b> → 딜러 <b>재고 ↑</b>', y:'달러 부채를 갚아야 하는데 빌릴 곳이 없으면 달러 자산을 판다. 스왑라인이 있으면 팔지 않고 빌린다.', e:'행동 경로. 원고 C03: 해외 순매도 약 $420bn(절반 이상 공식기관), 귀환은 미입증(L10).'},
+  {w:'은행 <b>예금 ↓</b> → 연준 <b>대출 ↑</b> (할인창구·BTFP)', y:'은행 대변에 생긴 구멍을 연준 차변이 메운다. 팔지 않고 빌리는 선택이다.', e:'행동 경로(이용 여부는 은행의 선택).'},
+  {w:'MMF <b>후원 repo 대출 ↓</b> = CCP <b>청산 채무 ↓</b>', y:'MMF가 빌려준 현금을 FICC가 경개로 받는다. 한쪽이 빼면 CCP 장부에서도 빠진다.', e:'항등식. CCP는 원고 범위 밖 — 해설용.'},
+  {w:'CCP <b>청산 채권 ↓</b> = 딜러 <b>청산 repo 차입 ↓</b>', y:'청산된 repo에서 딜러의 거래 상대는 CCP다. CCP 쪽 현금이 줄면 딜러의 조달이 준다.', e:'항등식. 원고 범위 밖 — 해설용.'},
+  {w:'CCP <b>증거금 요구 ↑</b> → 레버리지 펀드 <b>현금 수요 ↑</b>', y:'변동성이 오르면 증거금 모형이 요구액을 올린다. CCP 자신의 위험을 줄이는 행동이 회원에게는 현금 압박이 된다.', e:'행동 경로(모형의 규칙). 얼마나 올랐는지 원고에 숫자 없음.'},
+  {w:'CCP <b>변동증거금 ↑</b> → 연기금 <b>현금 수요 ↑</b>', y:'금리가 뛰면 고정 수취 스왑에 손실이 나고, 손실은 매일 현금으로 정산된다.', e:'행동 경로. 원고 C04(영국 LDI)에서 부분 자기강화로 판정, 미국 쪽은 다루지 않음.'},
+  {w:'연기금 <b>장기물 매도</b> → 딜러 <b>재고 ↑</b>', y:'증거금 현금을 만들려고 보유 장기물을 판다. 매도가 부채가 아니라 <b>증거금 쪽에서</b> 나온다.', e:'행동 경로. C04 영국 길트형 — 미국은 원고 밖, 해설용.'},
+  {w:'재무부 <b>T-bill 발행</b> = 발행사 <b>준비자산 T-bill</b>', y:'토큰이 발행되면 발행사는 그만큼 단기국채를 산다. 상환되면 그만큼 사지 않거나 판다.', e:'항등식(보유분). 현재 위험 — 부록 117 L14 후보. FRBSF 2026-26: 상위 2개 발행사 국채+repo 5년간 약 +2,000억 달러.'},
+  {w:'발행사 <b>repo 대출 ↓</b> = 딜러 <b>repo 차입 ↓</b>', y:'준비자산의 일부는 국채 담보 repo로 딜러에게 빌려준 현금이다. 상환에 쓰려고 빼면 딜러의 조달이 준다.', e:'항등식. 현재 위험 — L14 후보. 딜러를 누르는 <b>가장 직접적인 길</b>이다(117 v2).'},
+  {w:'발행사 <b>T-bill 매도</b> → 딜러 <b>재고 ↑</b>', y:'상환 요구가 준비자산의 현금·예금을 넘으면 T-bill을 판다. 받아 주는 자리가 딜러 대차대조표다.', e:'행동 경로 [가설]. BIS WP 1270의 추정은 유입 기준이다 — 유출만 따로 추정한 값은 <b>확인되지 않았다</b>. 상환 대금이 은행·정부 MMF로 돌아오면 순압력은 작다.'},
+  {w:'해외 CBDC <b>달러망 밖 결제 ↑</b> → 해외 <b>단기 달러 부채 수요 ↓</b>', y:'mBridge처럼 자국 CBDC로 국경 간 결제를 하면, 그만큼 달러를 빌려 결제할 필요가 줄어든다.', e:'행동 경로 [가설], 장기·구조 변화. L15는 증폭 조건 후보 — 효과 미검정.'},
+  {w:'은행 <b>신용한도 대출 ↑</b> = 사모신용 펀드 <b>차입 ↑</b>', y:'환매·차입자 인출에 대응하려고 펀드가 은행 신용한도를 끌어 쓴다. 펀드의 압박이 은행 차변으로 옮겨 간다.', e:'항등식. FSB 2026-05: 은행의 사모신용 펀드 신용한도 약 2,200억 달러(상업 자료는 2배 이상). 현재 위험 — L16 후보.'},
+  {w:'보험사 <b>사모신용 출자</b> = 펀드 <b>지분</b>', y:'보험사·연기금은 비유동 프리미엄을 보고 사모신용에 출자한다. 펀드 평가가 내려가면 그대로 보험사 차변이 깎인다.', e:'항등식. FSB: 사모펀드 소유 보험사가 사모신용에 출자하는 연결이 늘고 있다. L16 [해석 — 부]의 경로.'}
+];
+const FACE = {dr:'차변 · 자산', cr:'대변 · 부채'};
+/* 면이 맞았을 때 무슨 일인가 — 균형 제약으로 반대 면이 따라 움직일 때의 설명 */
+const BAL = {
+  dr:n=>`${n}: 조달이 빠졌으니 <b>자산도 줄여야</b> 한다 — 빌려주던 것을 회수하거나 보유한 것을 판다 (균형 제약).`,
+  cr:n=>`${n}: 자산이 줄거나 묶였으니 <b>조달도 줄이거나 갚는다</b> (균형 제약).`
+};
+/* 시나리오 — 외생 거시 충격이 아니라 "한 주체의 한쪽 면"에 들어오는 충격 */
+const SCEN = [
+  {k:'평시', id:'normal', t:'평시 — 충격 없음', kind:'정상 회전',
+   d:'repo·CP는 매일 만기가 오고 다시 빌린다. 모든 선은 <b>누군가의 차변 = 누군가의 대변</b>으로 맞물려 돈다. 평시엔 이 회전이 보이지 않을 뿐 멈춘 것이 아니다.',
+   c:'노드를 누르면 T-계정과 병목이 보인다.'},
+  {k:'C03', node:'mmf', side:'cr', t:'MMF 환매', kind:'prime MMF 대변 — 투자자 환매',
+   d:'투자자가 하루에 지분을 빼 간다. MMF는 역레포·CP를 만기에 굴리지 않는 방식으로 현금을 만든다.',
+   c:'원고: C03(2020-03), L05① <b>부분 자기강화</b>.'},
+  {k:'C02', node:'dealer', side:'cr', t:'딜러 조달 경색', kind:'딜러 대변 — repo 차입',
+   d:'딜러의 조달이 막히거나 비싸진다. 대차대조표 공간이 차면 고객에게 빌려주던 것부터 줄인다.',
+   c:'원고: C02(2019-09) NA 잠정, L02 <b>병목</b>.'},
+  {k:'L01·04', node:'hedgefund', side:'cr', t:'레버리지 펀드 증거금·repo 압박', kind:'레버리지 펀드 대변 — repo 차입·증거금',
+   d:'헤어컷·변동증거금이 오르면 같은 포지션에 더 많은 현금이 필요하다. 조달이 줄면 현물을 판다.',
+   c:'원고: C03 청산 관측 / 증폭 미측정.'},
+  {k:'L08', node:'foreign', side:'cr', t:'해외 달러 조달 경색', kind:'해외 대변 — 단기 달러 부채',
+   d:'달러 부채를 달러 수입 없이 진 주체가 롤오버를 못 한다. 스왑라인이 있으면 빌리고, 없으면 달러 자산을 판다.',
+   c:'원고: C01·C03 판정 보류 (귀환 확인되지 않음).'},
+  {k:'C05', node:'bank', side:'cr', t:'은행 예금 이탈', kind:'은행 대변 — 비보험 예금',
+   d:'미실현 손실을 본 비보험 예금이 나간다. 은행은 증권을 팔거나 연준에서 빌린다.',
+   c:'원고: C05(2023-03), L06 <b>부분 자기강화</b> — 은행 1곳 단위.'},
+  {k:'C08', node:'treasury', side:'cr', t:'국채 순발행 급증', kind:'재무부 대변 — 국채 공급',
+   d:'공급은 정책으로 정해진다. 질문은 어느 대차대조표가 받아내며 그 주체가 어떤 제약을 지는가다.',
+   c:'원고: C08(2023-08~11) <b>NA 반례</b>, L07 [가설].'},
+  {k:'C04', node:'pension', side:'cr', t:'연기금 스왑 증거금', kind:'보험·연기금 대변 — 파생 증거금',
+   d:'금리 급등이 증거금 현금 수요로 바뀌고, 매도가 부채가 아니라 증거금 쪽에서 나온다.',
+   c:'원고: C04(영국 2022) 부분 자기강화. <b>미국 쪽은 원고 밖 — 해설용.</b>'},
+  {k:'L14', node:'stable', side:'cr', t:'스테이블코인 상환 요구', kind:'발행사 대변 — 토큰 상환 (현재 위험)',
+   d:'토큰 보유자가 액면 상환을 요구한다. 발행사는 repo 대출을 빼고, 모자라면 T-bill을 판다.',
+   c:'<b>부록 117 · 기준일 2026-10-26 · L14 후보 [가설]</b> — 사례 판정이 아니다. 유출만 따로 추정한 국채시장 효과는 확인되지 않았다.'},
+  {k:'L16', node:'aicredit', side:'cr', t:'AI 사모신용 환매', kind:'사모신용 펀드 대변 — 반유동 지분 환매 (현재 위험)',
+   d:'AI 수익 실망으로 평가가 내려갈 것을 예상한 투자자가 먼저 환매를 요구한다. 펀드는 한도를 걸거나 은행 신용한도를 끌어 쓴다.',
+   c:'<b>부록 117 · 기준일 2026-10-26 · L16 후보 [가설]</b> — 2026년 초 환매 요청 급증·한도 적용은 [사실](FSB), 나선은 [가설].'}
+];
+const SC_NOTE='외생 거시 충격(금리·성장)이 아니라 <b>한 주체의 한쪽 면</b>에 들어오는 충격이다. 거시 쪽은 아래 출구를 거쳐 2층에서 다룬다.';
+
+const BACKSTOP = [
+  {to:'mmf',s:'dr',t:'MMLF',d:'MMF의 자산을 받아 준다 (2020-03-18)'},
+  {to:'dealer',s:'cr',t:'PDCF · repo 운영',d:'딜러에게 조달을 대 준다'},
+  {to:'dealer',s:'dr',t:'국채 매입',d:'재고를 덜어 준다 — 2020-03 체결 $812.5bn'},
+  {to:'foreign',s:'cr',t:'스왑라인',d:'달러 부채를 대신 조달해 준다'},
+  {to:'foreign',s:'dr',t:'FIMA repo',d:'국채를 팔지 않고 달러를 얻게 한다 (2020-03-31)'},
+  {to:'bank',s:'dr',t:'BTFP',d:'담보를 액면으로 평가해 준다 (2023-03-12)'}
+];
+
+/* ══════════ 출구 — 지도 밖 변수 (v4) ══════════
+   대차대조표가 아니라 가격·지수다. 아래층에 둔다: 거시 전달(2층)이 그 밑으로 이어진다.
+   연결은 전부 [가설]이고, 전파는 "닿았다"만 표시하며 세기를 넘기지 않는다. */
+const XY=-104;
+const EXITS = {
+  usd:{ name:'달러지수', short:'USD', freq:'일', pos:[-72,XY,8], from:['foreign'],
+    src:'연준 광의 명목 달러지수 (H.10) + AFE·EME 하위지수 — 91 §0 결정 (2026-10-23) · 2층 판정 109 / 00 v3.4 §15-3-1 (표본 2013-04~2026-09, 빈티지 2026-10-24)',
+    what:'달러의 다른 통화 대비 가치.',
+    why:'FX는 수입물가를 거쳐 PCE로 <b>직접</b> 가는 경로가 있어, 인플레이션에 대해 가장 깨끗한 다리다. L08(달러 부족)과 L13(헤지 비율 조정)이 여기서 만난다.',
+    not:'지도의 가설은 L08이 달러를 올리고 L13이 내린다는 것이다. 그러나 두 채널이 서로 상쇄하는지는 <b>자료에서 확인되지 않음</b>(2층 F-L2-4) — 해외 공적 보관 변화에 대한 AFE·EME 반응은 부호가 같았다(−0.154 · −0.088, h=4주). 상쇄가 <b>없다</b>는 뜻은 아니다. 집계 지수 두 개의 부호로는 두 채널을 가를 수 없고, 가르는 데 필요한 교차통화 베이시스는 결측이다.'},
+  acm:{ name:'기간 프리미엄', short:'ACM', freq:'일', pos:[-24,XY,8], from:['treasury','dealer','foreign','pension'],
+    src:'NY Fed — Adrian·Crump·Moench',
+    what:'장기 금리 중 단기 금리 기대 경로로 설명되지 않는 보상.',
+    why:'국채 공급(재무부), 그것을 받아내는 대차대조표(딜러), 해외 수요가 모두 이 숫자에 들어간다. 원고가 이미 쓰고 있다(C08).',
+    not:'모형 잔여다. C08의 +109bp를 두고 원고는 위험 보상·공급·중개 제약이 섞여 있다고 적고 <b>분해하지 않았다.</b>'},
+  nfci:{ name:'NFCI / ANFCI', short:'NFCI', freq:'주', pos:[24,XY,8], from:[],
+    src:'시카고 연준',
+    what:'위험·신용·레버리지 하위지수로 묶은 금융여건 요약. ANFCI는 경기 여건을 걷어낸 판.',
+    why:'표준 비교 기준이다. 5단계 질문 — 플러밍 세부가 이것을 넘어서는 예측력을 갖는가 — 의 <b>기준선</b>이 된다.',
+    not:'지도 전체를 요약하므로 어느 노드에서 왔는지 갈라 주지 않는다. 그래서 연결선을 그리지 않았다.'},
+  ebp:{ name:'초과채권프리미엄', short:'EBP', freq:'월', pos:[72,XY,8], from:['dealer','bank','bondfund','aicredit'],
+    src:'Gilchrist·Zakrajšek — 연준이 갱신해 공개',
+    what:'회사채 스프레드에서 기업 부도위험으로 설명되는 부분을 걷어낸 나머지.',
+    why:'남는 부분이 <b>중개자의 위험 부담 능력</b>을 담도록 설계됐다. 이 지도와 거시를 잇는 다리로 만들어진 변수다.',
+    not:'어느 중개자인지는 말하지 않는다. 딜러·은행·채권펀드 중 누가 움직였는지는 지도 쪽에서 봐야 한다.'}
+};
+let exitHit=new Set(), exitWeak=new Set(), exitHitFrom=new Set(), exitFirm=new Set();
+const exitRect={};
+
+/* ══════════ v11 — 2층 거시 타일 (4단계 표현, 91 v1.5 §4-6) ══════════
+   출구 판 아래에 거시 결과변수 3개. 반응 경로는 패널의 작은 그래프 묶음(후보 4 × 지평 1–24)과 95% 신뢰대.
+   선은 항등식 실선·행동 점선과 다른 세 번째 양식(청록 점-쇄선). Q1 결과는 출구 패널 글로만 — 연결선 색·굵기는 바꾸지 않는다.
+   수치는 106 승인 사양 그대로 재실행한 값(run_q2.py, 재현 일치). 2층은 1층 지도의 어떤 연결 상태도 바꾸지 않는다. */
+const MY=XY-36;
+const MACRO={
+  ip:{name:'산업생산',short:'IP',y:'ylev_IP',unit:'로그×100 누적',pos:[-50,MY,8],rep:true},
+  un:{name:'실업률',short:'UR',y:'ylev_UN',unit:'%p 누적',pos:[0,MY,8]},
+  pce:{name:'PCE 물가',short:'PCE',y:'ylev_PCEC',y2:'ylev_PCEH',unit:'로그×100 누적',pos:[50,MY,8]}
+};
+const CANDS=[['PD_UST','Δ PD 국채 순포지션'],['MMF','Δ OFR 프라임 비중'],['LEV','Δ 레버리지 펀드 순숏'],['CUSTODY','Δ 해외 공적 보관']];
+const macroRect={};
+let mSE='main', mPCE='core';
+const L2P={"ylev_IP":{"PD_UST":{"b":[-0.064,-0.106,0.012,-0.014,-0.06,-0.213,-0.255,-0.106,-0.146,-0.283,-0.525,-0.274,-0.268,-0.281,-0.358,-0.689,-0.711,-0.54,-0.192,-0.347,-0.473,-0.547,-0.595,-0.514],"lo":[-0.305,-0.611,-0.525,-0.518,-0.579,-0.928,-1.027,-0.776,-0.765,-0.897,-1.227,-0.98,-0.933,-0.981,-1.073,-1.677,-1.783,-1.476,-1.074,-1.16,-1.194,-1.179,-1.204,-1.146],"hi":[0.177,0.398,0.55,0.491,0.46,0.502,0.517,0.565,0.474,0.331,0.177,0.432,0.398,0.419,0.357,0.3,0.362,0.395,0.689,0.466,0.248,0.085,0.014,0.117],"p":[0.603,0.679,0.964,0.957,0.822,0.56,0.517,0.757,0.645,0.366,0.143,0.447,0.431,0.432,0.326,0.172,0.194,0.258,0.669,0.403,0.198,0.09,0.055,0.11],"bN":[-0.088,-0.094,0.022,0.041,-0.018,-0.207,-0.274,-0.124,-0.103,-0.188,-0.423,-0.227,-0.257,-0.26,-0.373,-0.673,-0.647,-0.492,-0.17,-0.321,-0.457,-0.638,-0.727,-0.658],"loN":[-0.265,-0.443,-0.39,-0.423,-0.373,-0.673,-0.692,-0.525,-0.56,-0.608,-1.01,-0.75,-0.708,-0.758,-0.956,-1.612,-1.679,-1.18,-0.553,-0.647,-0.908,-1.109,-1.277,-1.178],"hiN":[0.089,0.255,0.435,0.504,0.337,0.26,0.144,0.277,0.353,0.232,0.164,0.296,0.194,0.237,0.21,0.266,0.384,0.196,0.212,0.005,-0.005,-0.167,-0.178,-0.138],"pN":[0.331,0.599,0.915,0.863,0.92,0.385,0.199,0.544,0.658,0.379,0.158,0.394,0.264,0.305,0.21,0.16,0.219,0.161,0.382,0.054,0.047,0.008,0.009,0.013]},"MMF":{"b":[-0.009,-0.024,-0.062,-0.512,-0.454,-0.386,-0.244,-0.133,0.133,-0.051,-0.523,-0.48,-0.634,-0.502,-0.573,-0.528,-0.682,-0.709,-0.286,-0.352,-0.198,0.103,-0.073,0.113],"lo":[-0.254,-0.489,-0.66,-1.217,-1.077,-0.917,-0.756,-0.665,-0.542,-0.773,-1.486,-1.377,-1.532,-1.357,-1.461,-1.397,-1.417,-1.637,-1.209,-1.148,-0.965,-0.684,-0.763,-0.543],"hi":[0.236,0.442,0.535,0.194,0.169,0.145,0.268,0.4,0.809,0.672,0.44,0.416,0.265,0.353,0.316,0.34,0.052,0.218,0.637,0.444,0.569,0.891,0.617,0.768],"p":[0.942,0.921,0.838,0.155,0.153,0.155,0.35,0.626,0.699,0.89,0.287,0.293,0.167,0.25,0.207,0.233,0.068,0.134,0.544,0.386,0.613,0.797,0.835,0.736],"bN":[-0.072,-0.036,0.084,-0.163,-0.16,-0.218,-0.139,-0.032,0.183,0.016,-0.465,-0.481,-0.562,-0.386,-0.422,-0.357,-0.585,-0.696,-0.295,-0.385,-0.274,-0.08,-0.2,-0.093],"loN":[-0.262,-0.425,-0.258,-0.426,-0.446,-0.557,-0.461,-0.396,-0.275,-0.399,-1.194,-1.209,-1.451,-1.006,-1.041,-0.886,-1.162,-1.482,-0.923,-0.875,-0.676,-0.586,-0.734,-0.497],"hiN":[0.118,0.352,0.427,0.1,0.125,0.122,0.183,0.333,0.642,0.432,0.264,0.248,0.326,0.233,0.198,0.172,-0.008,0.091,0.333,0.105,0.128,0.426,0.334,0.312],"pN":[0.456,0.854,0.629,0.224,0.272,0.209,0.399,0.865,0.433,0.938,0.211,0.196,0.215,0.222,0.182,0.186,0.047,0.083,0.357,0.123,0.181,0.756,0.463,0.653]},"LEV":{"b":[-0.102,-0.133,-0.049,0.126,-0.023,-0.145,0.082,0.433,0.147,-0.214,-0.301,-0.28,-0.401,-0.685,-0.573,-0.427,-0.538,-0.612,-0.826,-0.558,-0.55,-0.23,-0.254,-0.291],"lo":[-0.298,-0.46,-0.451,-0.436,-0.568,-0.701,-0.639,-0.635,-0.797,-1.012,-0.949,-0.87,-1.106,-1.441,-1.29,-1.294,-1.524,-1.519,-1.646,-1.38,-1.336,-0.893,-0.817,-1.001],"hi":[0.094,0.195,0.354,0.688,0.522,0.412,0.804,1.5,1.09,0.583,0.348,0.31,0.304,0.071,0.145,0.44,0.448,0.295,-0.005,0.263,0.236,0.433,0.31,0.42],"p":[0.308,0.426,0.812,0.66,0.934,0.611,0.823,0.427,0.761,0.599,0.364,0.353,0.264,0.076,0.118,0.334,0.285,0.186,0.049,0.183,0.17,0.496,0.378,0.423],"bN":[-0.114,-0.183,-0.101,0.069,-0.12,-0.25,-0.075,0.202,-0.064,-0.366,-0.438,-0.419,-0.463,-0.696,-0.544,-0.425,-0.537,-0.643,-0.861,-0.65,-0.694,-0.434,-0.405,-0.361],"loN":[-0.259,-0.415,-0.368,-0.369,-0.498,-0.553,-0.546,-0.719,-0.67,-0.75,-0.801,-0.724,-0.803,-1.087,-0.91,-0.891,-0.942,-1.042,-1.282,-0.995,-1.047,-0.975,-0.865,-0.866],"hiN":[0.031,0.049,0.166,0.507,0.258,0.054,0.397,1.123,0.541,0.018,-0.076,-0.113,-0.123,-0.304,-0.177,0.042,-0.131,-0.244,-0.44,-0.304,-0.342,0.108,0.055,0.145],"pN":[0.123,0.122,0.458,0.758,0.534,0.107,0.756,0.668,0.835,0.062,0.018,0.007,0.008,0.0,0.004,0.074,0.009,0.002,0.0,0.0,0.0,0.117,0.084,0.162]},"CUSTODY":{"b":[0.314,0.39,0.32,0.322,0.485,0.658,0.528,0.233,0.167,0.14,0.109,0.213,0.039,-0.085,-0.103,0.195,0.359,0.279,0.066,-0.259,-0.33,-0.021,0.077,0.239],"lo":[0.096,0.016,-0.14,-0.168,0.009,-0.05,-0.133,-0.335,-0.336,-0.326,-0.436,-0.385,-0.64,-0.767,-0.736,-0.465,-0.543,-0.604,-0.674,-0.976,-1.005,-0.632,-0.571,-0.348],"hi":[0.532,0.763,0.779,0.811,0.96,1.366,1.189,0.801,0.671,0.605,0.655,0.81,0.718,0.597,0.529,0.854,1.26,1.162,0.806,0.459,0.344,0.589,0.724,0.825],"p":[0.005,0.041,0.173,0.198,0.046,0.069,0.118,0.422,0.515,0.556,0.695,0.486,0.911,0.807,0.749,0.563,0.435,0.536,0.861,0.48,0.337,0.945,0.817,0.425],"bN":[0.226,0.316,0.218,0.273,0.447,0.526,0.379,0.202,0.198,0.169,0.134,0.184,0.016,-0.092,-0.082,0.107,0.28,0.286,0.025,-0.282,-0.349,-0.116,-0.102,0.085],"loN":[0.024,-0.03,-0.085,-0.048,0.042,-0.112,-0.192,-0.206,-0.2,-0.177,-0.244,-0.151,-0.403,-0.62,-0.581,-0.391,-0.472,-0.522,-0.55,-0.752,-0.82,-0.545,-0.628,-0.388],"hiN":[0.428,0.662,0.521,0.594,0.852,1.165,0.95,0.611,0.595,0.516,0.513,0.52,0.436,0.437,0.417,0.605,1.032,1.094,0.6,0.187,0.122,0.312,0.424,0.559],"pN":[0.028,0.074,0.159,0.095,0.031,0.106,0.194,0.331,0.33,0.339,0.487,0.281,0.939,0.734,0.746,0.672,0.466,0.488,0.933,0.238,0.146,0.595,0.703,0.724]}},"ylev_UN":{"PD_UST":{"b":[0.008,-0.058,-0.105,-0.124,-0.098,0.031,0.0,-0.067,-0.1,0.041,0.04,-0.011,0.014,0.135,0.133,0.283,0.404,0.352,0.192,0.263,0.287,0.286,0.337,0.416],"lo":[-0.083,-0.3,-0.341,-0.383,-0.368,-0.336,-0.344,-0.394,-0.423,-0.293,-0.325,-0.363,-0.313,-0.214,-0.211,-0.217,-0.124,-0.106,-0.289,-0.193,-0.1,-0.083,-0.037,0.009],"hi":[0.098,0.184,0.131,0.136,0.172,0.399,0.344,0.26,0.224,0.375,0.405,0.341,0.341,0.485,0.478,0.783,0.933,0.811,0.673,0.718,0.675,0.656,0.712,0.823],"p":[0.87,0.638,0.383,0.35,0.477,0.868,0.998,0.689,0.547,0.811,0.831,0.951,0.932,0.448,0.448,0.267,0.134,0.132,0.434,0.258,0.146,0.129,0.077,0.045],"bN":[0.013,-0.066,-0.116,-0.152,-0.109,0.036,-0.004,-0.069,-0.116,0.016,-0.02,-0.043,-0.006,0.108,0.145,0.284,0.364,0.305,0.163,0.238,0.254,0.321,0.362,0.436],"loN":[-0.054,-0.23,-0.329,-0.434,-0.318,-0.18,-0.145,-0.237,-0.347,-0.168,-0.268,-0.272,-0.187,-0.105,-0.08,-0.143,-0.191,-0.084,-0.047,0.032,0.058,0.061,0.012,0.053],"hiN":[0.081,0.098,0.096,0.129,0.1,0.251,0.137,0.099,0.115,0.201,0.227,0.185,0.175,0.322,0.37,0.711,0.919,0.694,0.373,0.445,0.449,0.581,0.712,0.819],"pN":[0.699,0.432,0.282,0.289,0.306,0.745,0.957,0.422,0.326,0.863,0.872,0.709,0.951,0.319,0.207,0.193,0.199,0.124,0.128,0.024,0.011,0.016,0.042,0.026]},"MMF":{"b":[-0.02,-0.103,0.046,0.137,0.09,0.027,0.003,-0.014,-0.222,-0.059,0.2,0.149,0.304,0.286,0.257,0.241,0.217,0.373,0.223,0.234,0.042,-0.159,-0.022,-0.165],"lo":[-0.119,-0.335,-0.268,-0.302,-0.311,-0.331,-0.372,-0.384,-0.641,-0.449,-0.341,-0.357,-0.28,-0.281,-0.236,-0.202,-0.165,-0.151,-0.283,-0.204,-0.417,-0.653,-0.489,-0.649],"hi":[0.08,0.129,0.36,0.575,0.491,0.384,0.378,0.356,0.198,0.33,0.742,0.654,0.889,0.854,0.75,0.684,0.6,0.897,0.728,0.671,0.501,0.336,0.445,0.318],"p":[0.696,0.385,0.775,0.541,0.661,0.883,0.988,0.942,0.3,0.766,0.468,0.564,0.308,0.323,0.307,0.286,0.265,0.163,0.388,0.295,0.858,0.53,0.927,0.503],"bN":[0.042,-0.057,0.023,0.025,-0.004,-0.013,-0.027,-0.055,-0.174,-0.032,0.231,0.218,0.395,0.331,0.333,0.256,0.3,0.441,0.307,0.263,0.169,-0.007,0.078,-0.003],"loN":[-0.042,-0.267,-0.15,-0.129,-0.193,-0.209,-0.218,-0.307,-0.569,-0.329,-0.096,-0.072,-0.106,-0.074,-0.052,0.037,0.068,-0.035,-0.037,-0.007,0.045,-0.228,-0.134,-0.19],"hiN":[0.127,0.153,0.197,0.179,0.185,0.184,0.165,0.197,0.221,0.264,0.557,0.509,0.896,0.736,0.718,0.476,0.532,0.918,0.65,0.533,0.294,0.214,0.29,0.184],"pN":[0.326,0.596,0.791,0.748,0.967,0.898,0.785,0.669,0.388,0.831,0.166,0.141,0.122,0.11,0.09,0.022,0.011,0.07,0.08,0.056,0.007,0.95,0.471,0.973]},"LEV":{"b":[0.023,-0.036,-0.068,-0.171,-0.229,-0.052,-0.216,-0.55,-0.341,-0.157,-0.108,-0.096,0.067,0.158,0.087,-0.092,0.035,0.059,0.137,0.065,0.072,-0.009,0.016,0.159],"lo":[-0.058,-0.202,-0.29,-0.504,-0.562,-0.385,-0.619,-1.192,-0.883,-0.71,-0.553,-0.48,-0.356,-0.239,-0.296,-0.567,-0.517,-0.409,-0.351,-0.438,-0.378,-0.455,-0.352,-0.295],"hi":[0.104,0.131,0.154,0.161,0.104,0.282,0.186,0.091,0.202,0.397,0.338,0.288,0.491,0.555,0.471,0.382,0.588,0.527,0.625,0.567,0.523,0.437,0.383,0.612],"p":[0.575,0.674,0.549,0.312,0.177,0.762,0.292,0.093,0.218,0.579,0.636,0.625,0.755,0.435,0.655,0.703,0.9,0.805,0.582,0.801,0.753,0.969,0.933,0.493],"bN":[0.03,-0.016,-0.04,-0.145,-0.171,-0.003,-0.128,-0.38,-0.208,-0.062,-0.002,0.006,0.114,0.188,0.082,-0.079,0.039,0.094,0.168,0.1,0.153,0.155,0.083,0.183],"loN":[-0.037,-0.146,-0.222,-0.432,-0.449,-0.207,-0.385,-1.011,-0.594,-0.347,-0.243,-0.219,-0.144,-0.106,-0.15,-0.38,-0.168,-0.086,-0.085,-0.124,-0.095,-0.217,-0.145,-0.144],"hiN":[0.096,0.113,0.141,0.142,0.107,0.201,0.129,0.25,0.178,0.222,0.239,0.23,0.371,0.481,0.313,0.223,0.246,0.273,0.42,0.324,0.4,0.528,0.311,0.509],"pN":[0.386,0.806,0.662,0.323,0.227,0.979,0.329,0.237,0.291,0.668,0.986,0.961,0.386,0.21,0.489,0.609,0.714,0.306,0.193,0.383,0.226,0.413,0.477,0.272]},"CUSTODY":{"b":[-0.093,-0.151,-0.019,-0.075,-0.111,-0.259,-0.263,-0.123,-0.149,-0.128,-0.022,-0.121,-0.016,0.008,0.005,-0.044,-0.259,-0.224,-0.175,-0.047,0.003,-0.006,-0.125,-0.164],"lo":[-0.184,-0.327,-0.259,-0.383,-0.379,-0.693,-0.667,-0.484,-0.482,-0.433,-0.321,-0.456,-0.405,-0.367,-0.356,-0.402,-0.738,-0.681,-0.568,-0.474,-0.395,-0.358,-0.529,-0.578],"hi":[-0.001,0.025,0.221,0.232,0.157,0.174,0.141,0.237,0.185,0.176,0.278,0.214,0.372,0.383,0.366,0.313,0.22,0.233,0.218,0.38,0.4,0.346,0.279,0.249],"p":[0.046,0.092,0.876,0.631,0.416,0.241,0.201,0.502,0.382,0.409,0.887,0.479,0.934,0.967,0.977,0.808,0.29,0.336,0.383,0.83,0.99,0.974,0.544,0.436],"bN":[-0.091,-0.123,-0.041,-0.066,-0.118,-0.217,-0.2,-0.136,-0.167,-0.157,-0.055,-0.109,-0.014,-0.001,-0.002,-0.021,-0.25,-0.239,-0.153,-0.041,-0.047,-0.018,-0.129,-0.163],"loN":[-0.196,-0.282,-0.2,-0.255,-0.332,-0.575,-0.53,-0.365,-0.43,-0.433,-0.243,-0.324,-0.269,-0.28,-0.289,-0.295,-0.617,-0.604,-0.421,-0.311,-0.312,-0.28,-0.381,-0.421],"hiN":[0.014,0.036,0.118,0.123,0.096,0.141,0.13,0.093,0.097,0.119,0.133,0.107,0.241,0.279,0.286,0.254,0.117,0.126,0.114,0.23,0.219,0.244,0.122,0.095],"pN":[0.088,0.129,0.614,0.496,0.281,0.234,0.235,0.244,0.216,0.264,0.567,0.323,0.914,0.997,0.991,0.883,0.182,0.199,0.261,0.769,0.73,0.894,0.314,0.217]}},"ylev_PCEC":{"PD_UST":{"b":[-0.017,-0.018,-0.039,-0.039,-0.045,-0.053,-0.067,-0.069,-0.071,-0.086,-0.095,-0.082,-0.081,-0.09,-0.121,-0.131,-0.133,-0.154,-0.152,-0.149,-0.149,-0.189,-0.222,-0.236],"lo":[-0.051,-0.068,-0.098,-0.11,-0.124,-0.141,-0.164,-0.178,-0.194,-0.219,-0.243,-0.241,-0.249,-0.262,-0.302,-0.329,-0.349,-0.379,-0.394,-0.4,-0.417,-0.478,-0.536,-0.569],"hi":[0.016,0.032,0.02,0.033,0.034,0.036,0.03,0.04,0.052,0.048,0.052,0.076,0.087,0.083,0.06,0.067,0.082,0.071,0.09,0.101,0.119,0.1,0.092,0.097],"p":[0.304,0.48,0.194,0.288,0.264,0.244,0.173,0.214,0.258,0.21,0.205,0.308,0.344,0.308,0.19,0.194,0.225,0.181,0.218,0.243,0.276,0.2,0.165,0.165],"bN":[-0.017,-0.019,-0.037,-0.036,-0.046,-0.055,-0.07,-0.073,-0.072,-0.084,-0.091,-0.079,-0.081,-0.094,-0.12,-0.127,-0.131,-0.161,-0.166,-0.166,-0.173,-0.215,-0.261,-0.257],"loN":[-0.045,-0.059,-0.083,-0.093,-0.107,-0.123,-0.145,-0.155,-0.171,-0.191,-0.209,-0.207,-0.219,-0.23,-0.258,-0.274,-0.296,-0.331,-0.336,-0.341,-0.353,-0.415,-0.48,-0.496],"hiN":[0.011,0.021,0.01,0.022,0.016,0.013,0.005,0.009,0.026,0.023,0.026,0.048,0.057,0.041,0.018,0.02,0.033,0.009,0.004,0.009,0.008,-0.015,-0.043,-0.017],"pN":[0.236,0.345,0.119,0.222,0.146,0.112,0.068,0.08,0.149,0.126,0.126,0.224,0.252,0.171,0.088,0.091,0.118,0.064,0.055,0.063,0.061,0.035,0.019,0.036]},"MMF":{"b":[-0.0,-0.014,-0.027,-0.015,0.005,-0.003,0.022,0.011,0.029,0.012,0.002,-0.017,-0.007,0.003,0.018,0.01,0.017,0.041,0.059,0.073,0.085,0.106,0.088,0.09],"lo":[-0.03,-0.063,-0.09,-0.09,-0.078,-0.092,-0.079,-0.098,-0.093,-0.12,-0.147,-0.18,-0.177,-0.179,-0.172,-0.194,-0.182,-0.169,-0.167,-0.172,-0.176,-0.179,-0.212,-0.237],"hi":[0.029,0.034,0.037,0.06,0.088,0.086,0.122,0.12,0.15,0.144,0.15,0.147,0.163,0.185,0.207,0.215,0.217,0.251,0.284,0.318,0.346,0.39,0.389,0.417],"p":[0.976,0.566,0.407,0.692,0.912,0.943,0.673,0.844,0.64,0.858,0.983,0.842,0.939,0.974,0.856,0.922,0.865,0.7,0.611,0.558,0.524,0.467,0.564,0.59],"bN":[-0.001,-0.023,-0.038,-0.036,-0.031,-0.049,-0.035,-0.051,-0.044,-0.061,-0.083,-0.116,-0.12,-0.122,-0.136,-0.154,-0.174,-0.161,-0.156,-0.157,-0.158,-0.146,-0.179,-0.21],"loN":[-0.025,-0.059,-0.084,-0.082,-0.083,-0.107,-0.1,-0.121,-0.122,-0.143,-0.168,-0.209,-0.209,-0.223,-0.235,-0.26,-0.278,-0.258,-0.259,-0.248,-0.255,-0.251,-0.296,-0.346],"hiN":[0.023,0.014,0.007,0.01,0.021,0.009,0.029,0.02,0.035,0.02,0.002,-0.023,-0.031,-0.021,-0.037,-0.047,-0.069,-0.064,-0.054,-0.067,-0.061,-0.04,-0.061,-0.074],"pN":[0.93,0.222,0.098,0.122,0.244,0.1,0.286,0.159,0.274,0.139,0.055,0.014,0.009,0.018,0.007,0.005,0.001,0.001,0.003,0.001,0.001,0.007,0.003,0.002]},"LEV":{"b":[-0.029,-0.047,-0.069,-0.074,-0.081,-0.089,-0.086,-0.091,-0.095,-0.105,-0.127,-0.15,-0.166,-0.178,-0.185,-0.202,-0.215,-0.23,-0.271,-0.294,-0.289,-0.319,-0.354,-0.397],"lo":[-0.058,-0.091,-0.124,-0.138,-0.152,-0.173,-0.182,-0.204,-0.217,-0.234,-0.264,-0.297,-0.328,-0.348,-0.365,-0.398,-0.418,-0.454,-0.504,-0.54,-0.575,-0.611,-0.659,-0.715],"hi":[0.001,-0.003,-0.014,-0.01,-0.011,-0.005,0.011,0.021,0.028,0.023,0.01,-0.002,-0.005,-0.007,-0.006,-0.005,-0.011,-0.006,-0.037,-0.048,-0.003,-0.026,-0.05,-0.078],"p":[0.055,0.035,0.014,0.024,0.024,0.039,0.082,0.111,0.129,0.107,0.069,0.047,0.044,0.041,0.043,0.044,0.039,0.044,0.023,0.019,0.047,0.033,0.023,0.015],"bN":[-0.033,-0.052,-0.078,-0.085,-0.097,-0.107,-0.11,-0.119,-0.12,-0.132,-0.156,-0.173,-0.196,-0.209,-0.218,-0.23,-0.243,-0.269,-0.31,-0.331,-0.328,-0.355,-0.387,-0.411],"loN":[-0.057,-0.089,-0.126,-0.141,-0.157,-0.178,-0.193,-0.217,-0.22,-0.24,-0.276,-0.305,-0.345,-0.365,-0.378,-0.384,-0.394,-0.425,-0.476,-0.508,-0.522,-0.565,-0.606,-0.633],"hiN":[-0.009,-0.016,-0.029,-0.028,-0.037,-0.036,-0.028,-0.021,-0.021,-0.024,-0.036,-0.041,-0.046,-0.053,-0.059,-0.076,-0.092,-0.113,-0.145,-0.153,-0.133,-0.145,-0.169,-0.188],"pN":[0.007,0.005,0.002,0.003,0.002,0.003,0.009,0.017,0.018,0.016,0.011,0.01,0.01,0.009,0.007,0.003,0.002,0.001,0.0,0.0,0.001,0.001,0.001,0.0]},"CUSTODY":{"b":[-0.012,-0.031,-0.047,-0.057,-0.064,-0.083,-0.085,-0.097,-0.101,-0.087,-0.079,-0.087,-0.111,-0.126,-0.154,-0.16,-0.195,-0.217,-0.233,-0.255,-0.264,-0.263,-0.259,-0.276],"lo":[-0.043,-0.075,-0.103,-0.118,-0.132,-0.162,-0.175,-0.196,-0.212,-0.207,-0.214,-0.24,-0.274,-0.294,-0.331,-0.343,-0.389,-0.426,-0.457,-0.494,-0.525,-0.544,-0.558,-0.592],"hi":[0.018,0.012,0.01,0.004,0.004,-0.003,0.005,0.002,0.01,0.033,0.055,0.065,0.051,0.043,0.022,0.024,-0.001,-0.008,-0.01,-0.016,-0.002,0.017,0.04,0.04],"p":[0.435,0.16,0.104,0.067,0.065,0.043,0.065,0.056,0.074,0.156,0.249,0.262,0.18,0.144,0.087,0.088,0.049,0.041,0.041,0.037,0.048,0.066,0.09,0.086],"bN":[-0.008,-0.024,-0.039,-0.049,-0.055,-0.072,-0.067,-0.079,-0.074,-0.061,-0.048,-0.043,-0.063,-0.074,-0.099,-0.098,-0.113,-0.135,-0.153,-0.169,-0.178,-0.173,-0.167,-0.174],"loN":[-0.036,-0.068,-0.096,-0.113,-0.13,-0.168,-0.179,-0.206,-0.208,-0.211,-0.215,-0.235,-0.269,-0.298,-0.338,-0.33,-0.363,-0.38,-0.42,-0.444,-0.46,-0.466,-0.464,-0.469],"hiN":[0.019,0.02,0.018,0.015,0.019,0.025,0.045,0.048,0.06,0.09,0.12,0.148,0.143,0.151,0.141,0.134,0.136,0.11,0.115,0.106,0.104,0.12,0.131,0.122],"pN":[0.551,0.278,0.18,0.135,0.143,0.146,0.242,0.225,0.28,0.43,0.577,0.657,0.548,0.52,0.419,0.406,0.372,0.281,0.263,0.229,0.216,0.247,0.272,0.249]}},"ylev_PCEH":{"PD_UST":{"b":[-0.035,-0.034,-0.042,-0.028,-0.043,-0.051,-0.053,-0.028,0.005,-0.012,-0.009,0.001,0.004,-0.02,-0.06,-0.07,-0.075,-0.111,-0.094,-0.072,-0.085,-0.13,-0.166,-0.146],"lo":[-0.085,-0.11,-0.129,-0.121,-0.152,-0.178,-0.186,-0.165,-0.145,-0.18,-0.194,-0.206,-0.216,-0.245,-0.308,-0.33,-0.351,-0.397,-0.399,-0.394,-0.426,-0.499,-0.568,-0.568],"hi":[0.014,0.042,0.045,0.065,0.066,0.075,0.08,0.108,0.156,0.155,0.177,0.209,0.223,0.206,0.187,0.191,0.202,0.174,0.212,0.25,0.257,0.238,0.235,0.277],"p":[0.163,0.379,0.341,0.553,0.437,0.427,0.432,0.683,0.943,0.886,0.925,0.989,0.974,0.864,0.633,0.6,0.597,0.444,0.548,0.66,0.628,0.488,0.417,0.499],"bN":[-0.033,-0.036,-0.038,-0.025,-0.046,-0.06,-0.062,-0.037,-0.001,-0.012,-0.002,0.01,0.004,-0.005,-0.036,-0.05,-0.059,-0.112,-0.109,-0.095,-0.113,-0.156,-0.215,-0.168],"loN":[-0.073,-0.096,-0.11,-0.108,-0.146,-0.171,-0.176,-0.151,-0.127,-0.151,-0.152,-0.16,-0.175,-0.202,-0.236,-0.247,-0.268,-0.308,-0.307,-0.3,-0.329,-0.393,-0.466,-0.444],"hiN":[0.007,0.024,0.034,0.058,0.055,0.051,0.053,0.077,0.126,0.127,0.148,0.179,0.183,0.192,0.164,0.147,0.149,0.083,0.088,0.11,0.104,0.081,0.036,0.107],"pN":[0.102,0.242,0.296,0.553,0.375,0.287,0.292,0.528,0.994,0.864,0.978,0.912,0.964,0.959,0.722,0.618,0.578,0.261,0.277,0.363,0.309,0.197,0.093,0.232]},"MMF":{"b":[-0.016,-0.045,-0.066,-0.066,-0.05,-0.028,0.01,-0.02,-0.016,-0.073,-0.098,-0.112,-0.127,-0.112,-0.072,-0.093,-0.07,-0.048,-0.077,-0.053,-0.061,-0.017,-0.037,-0.039],"lo":[-0.091,-0.142,-0.175,-0.202,-0.205,-0.209,-0.199,-0.252,-0.26,-0.334,-0.395,-0.421,-0.446,-0.442,-0.407,-0.449,-0.416,-0.392,-0.454,-0.458,-0.493,-0.462,-0.508,-0.54],"hi":[0.06,0.052,0.044,0.069,0.105,0.152,0.219,0.212,0.228,0.189,0.199,0.197,0.192,0.218,0.262,0.263,0.276,0.296,0.299,0.351,0.372,0.428,0.434,0.461],"p":[0.681,0.36,0.241,0.338,0.525,0.757,0.926,0.868,0.899,0.586,0.517,0.478,0.435,0.506,0.672,0.608,0.691,0.786,0.688,0.795,0.784,0.94,0.876,0.877],"bN":[0.003,-0.025,-0.054,-0.069,-0.067,-0.064,-0.032,-0.051,-0.058,-0.108,-0.134,-0.164,-0.196,-0.197,-0.201,-0.237,-0.253,-0.233,-0.256,-0.262,-0.28,-0.259,-0.305,-0.349],"loN":[-0.045,-0.089,-0.135,-0.172,-0.19,-0.198,-0.184,-0.224,-0.239,-0.282,-0.316,-0.353,-0.377,-0.381,-0.36,-0.412,-0.422,-0.374,-0.432,-0.423,-0.444,-0.407,-0.443,-0.499],"hiN":[0.05,0.039,0.026,0.033,0.057,0.07,0.12,0.122,0.124,0.067,0.048,0.025,-0.014,-0.013,-0.042,-0.062,-0.083,-0.092,-0.08,-0.1,-0.116,-0.111,-0.167,-0.2],"pN":[0.917,0.44,0.186,0.185,0.29,0.351,0.677,0.563,0.533,0.227,0.15,0.09,0.034,0.036,0.013,0.008,0.004,0.001,0.004,0.002,0.001,0.001,0.0,0.0]},"LEV":{"b":[-0.053,-0.08,-0.093,-0.094,-0.107,-0.109,-0.099,-0.107,-0.11,-0.136,-0.156,-0.183,-0.234,-0.237,-0.261,-0.281,-0.301,-0.33,-0.354,-0.361,-0.344,-0.378,-0.42,-0.444],"lo":[-0.109,-0.156,-0.195,-0.208,-0.231,-0.253,-0.258,-0.273,-0.279,-0.314,-0.35,-0.395,-0.469,-0.487,-0.526,-0.565,-0.581,-0.625,-0.668,-0.693,-0.735,-0.779,-0.828,-0.868],"hi":[0.003,-0.005,0.01,0.019,0.017,0.034,0.06,0.06,0.06,0.043,0.038,0.029,0.001,0.013,0.003,0.003,-0.021,-0.035,-0.04,-0.03,0.047,0.022,-0.011,-0.021],"p":[0.064,0.037,0.076,0.102,0.091,0.136,0.222,0.21,0.204,0.137,0.114,0.09,0.051,0.064,0.053,0.052,0.035,0.029,0.027,0.033,0.085,0.064,0.044,0.04],"bN":[-0.061,-0.09,-0.104,-0.108,-0.132,-0.139,-0.141,-0.161,-0.162,-0.189,-0.211,-0.228,-0.276,-0.278,-0.304,-0.326,-0.351,-0.396,-0.412,-0.417,-0.398,-0.432,-0.477,-0.479],"loN":[-0.112,-0.154,-0.187,-0.205,-0.242,-0.273,-0.298,-0.336,-0.336,-0.369,-0.404,-0.432,-0.505,-0.521,-0.55,-0.573,-0.59,-0.642,-0.687,-0.705,-0.746,-0.813,-0.886,-0.897],"hiN":[-0.01,-0.026,-0.02,-0.01,-0.021,-0.005,0.015,0.014,0.012,-0.009,-0.018,-0.023,-0.047,-0.035,-0.058,-0.078,-0.112,-0.15,-0.138,-0.13,-0.05,-0.052,-0.068,-0.061],"pN":[0.018,0.006,0.015,0.03,0.02,0.042,0.076,0.071,0.068,0.04,0.032,0.029,0.018,0.025,0.015,0.01,0.004,0.002,0.003,0.004,0.025,0.026,0.022,0.025]},"CUSTODY":{"b":[-0.008,-0.032,-0.062,-0.081,-0.128,-0.173,-0.193,-0.218,-0.244,-0.245,-0.252,-0.282,-0.288,-0.314,-0.344,-0.34,-0.358,-0.376,-0.412,-0.437,-0.419,-0.403,-0.396,-0.428],"lo":[-0.056,-0.101,-0.153,-0.181,-0.246,-0.297,-0.322,-0.355,-0.385,-0.399,-0.423,-0.485,-0.516,-0.55,-0.59,-0.594,-0.617,-0.655,-0.711,-0.759,-0.767,-0.772,-0.786,-0.834],"hi":[0.039,0.037,0.029,0.018,-0.011,-0.048,-0.063,-0.082,-0.102,-0.091,-0.081,-0.08,-0.059,-0.079,-0.098,-0.086,-0.098,-0.097,-0.114,-0.115,-0.071,-0.034,-0.006,-0.021],"p":[0.725,0.36,0.185,0.109,0.032,0.006,0.004,0.002,0.001,0.002,0.004,0.006,0.014,0.009,0.006,0.009,0.007,0.008,0.007,0.008,0.018,0.032,0.046,0.039],"bN":[0.011,0.002,-0.029,-0.046,-0.087,-0.119,-0.124,-0.14,-0.152,-0.155,-0.153,-0.163,-0.17,-0.182,-0.206,-0.187,-0.195,-0.217,-0.253,-0.27,-0.255,-0.237,-0.237,-0.258],"loN":[-0.028,-0.052,-0.093,-0.118,-0.18,-0.235,-0.259,-0.29,-0.31,-0.325,-0.329,-0.351,-0.379,-0.414,-0.447,-0.424,-0.434,-0.451,-0.502,-0.524,-0.519,-0.512,-0.51,-0.523],"hiN":[0.051,0.056,0.034,0.025,0.006,-0.002,0.011,0.011,0.007,0.014,0.023,0.025,0.039,0.051,0.036,0.05,0.043,0.018,-0.004,-0.016,0.008,0.037,0.037,0.008],"pN":[0.58,0.931,0.369,0.201,0.068,0.045,0.072,0.069,0.061,0.073,0.088,0.09,0.11,0.125,0.095,0.122,0.109,0.07,0.047,0.037,0.057,0.091,0.09,0.057]}}};
+/* Q1 — 출구 연결 결과, 글로만 (109 · [주] HC1 · 2020더미 · 대표 h, x 1표준편차당) */
+const Q1X={
+  usd:{rows:[['E1 해외 공적 보관 → 광의 (h=4주)','−0.116 · Holm 0.623'],['  AFE · EME 하위지수 (F-L2-4)','−0.154 · −0.088']],
+       note:'AFE·EME 부호가 같아 <b>F-L2-4 발동</b> — 위 「말하지 않는 것」의 서술을 고친 근거다.'},
+  acm:{rows:[['E2 재무부 10년 초과 비중 (월, h=1)','−0.005 · Holm 1.000'],['E3 딜러 국채 순포지션 (h=4주)','−0.009 · Holm 1.000'],['E4 해외 공적 보관 (h=4주)','+0.012 · Holm 0.932'],['E5 자산운용사 장기물 순롱 (h=4주)','−0.004 · Holm 1.000']]},
+  ebp:{rows:[['E6 딜러 회사채 순포지션 (월, h=1)','−0.006 · Holm 1.000'],['E7 은행 C&I 대출 (월, h=1)','+0.005 · Holm 1.000'],['E8 채권펀드 흐름','검정 불가']],
+       note:'E8은 장기 무료 계열이 없어 검정하지 않았다(ICI 장기 역사 회원 전용). AI 사모신용 → EBP 선(v12, 현재 위험 층)은 <b>Q1 검정 밖의 [가설]</b>이다.'},
+  nfci:{rows:[],note:'Q1·Q2 모두에서 <b>통제(기준선)</b>로 쓰였다 — 검정 대상이 아니다. 2층의 질문이 "이것을 넘어서는 정보가 있는가"다.'}
+};
+
+/* ══════════ 3D 투영 — 직접 구현 ══════════ */
+const SW=11, SH=15, SD=8, GAP=2.8;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W=0,H=0,DPR=1,CX=0,CY=0;
+let az=.34, el=.20, dist=228, focal=760;
+const nodeBox={};   /* id → 화면상 두 슬랩의 외곽 사각형 (라벨 충돌 회피용) */
+const tgt={x:0,y:-2,z:0};
+
+function rot(p){
+  const x=p.x-tgt.x, y=p.y-tgt.y, z=p.z-tgt.z;
+  const ca=Math.cos(az), sa=Math.sin(az);
+  const x1 = x*ca - z*sa, z1 = x*sa + z*ca;
+  const ce=Math.cos(el), se=Math.sin(el);
+  const y1 = y*ce - z1*se, z2 = y*se + z1*ce;
+  return {x:x1, y:y1, z:z2};
+}
+function rotDir(n){
+  const ca=Math.cos(az), sa=Math.sin(az);
+  const x1 = n.x*ca - n.z*sa, z1 = n.x*sa + n.z*ca;
+  const ce=Math.cos(el), se=Math.sin(el);
+  return {x:x1, y:n.y*ce - z1*se, z:n.y*se + z1*ce};
+}
+function proj(p){
+  const r = rot(p);
+  const zc = r.z + dist;
+  const s = focal / Math.max(zc, 20);
+  return {x:CX + r.x*s, y:CY - r.y*s, z:zc, s};
+}
+
+const LIGHT = (function(){ const l={x:-.42,y:.76,z:.5}; const m=Math.hypot(l.x,l.y,l.z);
+  return {x:l.x/m,y:l.y/m,z:l.z/m}; })();
+
+function shade(hex, k){
+  const r=(hex>>16)&255, g=(hex>>8)&255, b=hex&255;
+  return 'rgb('+Math.round(r*k)+','+Math.round(g*k)+','+Math.round(b*k)+')';
+}
+const DR_C = 0x7DD3C0, CR_C = 0xE8795A, HOT_C = 0xFF5C5C;
+
+/* 박스 정점·면 */
+const VT=[[-1,1,1],[1,1,1],[1,-1,1],[-1,-1,1],[-1,1,-1],[1,1,-1],[1,-1,-1],[-1,-1,-1]];
+const FC=[
+  {i:[0,1,2,3],n:{x:0,y:0,z:1}},  {i:[5,4,7,6],n:{x:0,y:0,z:-1}},
+  {i:[4,0,3,7],n:{x:-1,y:0,z:0}}, {i:[1,5,6,2],n:{x:1,y:0,z:0}},
+  {i:[4,5,1,0],n:{x:0,y:1,z:0}},  {i:[3,2,6,7],n:{x:0,y:-1,z:0}}
+];
+
+/* ══════════ 상태 ══════════ */
+let sel='dealer', side='cr', fedOn=false;
+const heat={};   /* id|side → 0..1 */
+const pulses=[];
+Object.keys(NODES).forEach(id=>{ heat[id+'|dr']=0; heat[id+'|cr']=0; });
+
+/* ══════════ v6 — 충격 연출 시간표 ══════════
+   최초 충격: 맞은 면이 크게 여러 번 번쩍 + 충격파 고리 + 화면 섬광 + 흔들림.
+   그다음 홉(깊이)마다 차례로: 펄스가 선을 따라 달리고(선도 붉게 달아오름),
+   도착한 면이 두 번 번쩍 + 고리. 같은 깊이는 함께, 깊이 사이엔 숨 고르기.
+   마지막에 닿은 출구가 금색으로 번쩍. 세기는 전파 세기 w에 비례한다. */
+const FX={flash:[], rings:[], shakes:[], lit:[], scr:null, xflash:-1e9, endAt:0, holdUntil:0};
+const now=()=>performance.now();
+/* 0..1 — period마다 한 번씩 치고 빠르게 꺼지는 섬광, 회차마다 조금씩 약해짐 */
+function strobe(dt,n,p){
+  if(dt<0) return 0;
+  const i=Math.floor(dt/p);
+  if(i>=n) return 0;
+  return Math.exp(-(dt-i*p)/(p*.36))*(1-i/(n+1)*.55);
+}
+function flashOf(key,t){ let v=0; for(const f of FX.flash){ if(f.key===key) v=Math.max(v,f.amp*strobe(t-f.t0,f.n,f.p)); } return v; }
+function visHeat(key,t){ return Math.min(1,heat[key])+flashOf(key,t); }   /* 1을 넘을 수 있다 — 넘는 만큼 더 밝게 */
+function punch(key,t){ return 1+.24*Math.min(1.5,flashOf(key,t)); }      /* 번쩍일 때 면이 부풀었다 돌아온다 */
+function shakeOff(t){
+  let x=0,y=0;
+  for(const s of FX.shakes){ const dt=t-s.t0; if(dt<0||dt>s.dur) continue;
+    const k=s.amp*Math.pow(1-dt/s.dur,2); x+=k*Math.sin(dt*.11+s.t0); y+=k*Math.cos(dt*.093+s.t0*.7); }
+  return [x,y];
+}
+function litOf(i,t){
+  let v=0;
+  for(const l of FX.lit){ if(l.i!==i) continue; const dt=t-l.t0; if(dt<0) continue;
+    v=Math.max(v, dt<l.dur ? l.a*(.35+.65*dt/l.dur) : l.a*Math.exp(-(dt-l.dur)/520)); }
+  return v;
+}
+
+function slabCenter(id, s){
+  const p = NODES[id].pos, off = s==='dr' ? -(SW/2+GAP/2) : (SW/2+GAP/2);
+  return {x:p[0]+off, y:p[1], z:p[2]};
+}
+
+/* ══════════ v7 — 떠 있는 느낌 ══════════
+   ① 노드 위에 떠서 천천히 오르내리는 메달(주체 유형 기호 — 실제 기업 로고 아님)
+   ② 카메라가 아주 천천히 흔들려 시차(parallax)로 깊이가 읽힌다
+   ③ 노드 아래 바닥까지 내려가는 가는 선 + 바닥 그림자 + 아래에서 비추는 은은한 빛 */
+const MED_LIFT=9, MED_R=4.0;
+function medPos(id,T){ const p=NODES[id].pos, ph=(p[0]*.07+p[2]*.11);
+  return {x:p[0], y:p[1]+SH/2+MED_LIFT+(REDUCED?0:.9*Math.sin(T/900+ph)), z:p[2]}; }
+function iconPath(ctx,k,x,y,r){
+  const L=(a,b,c,d)=>{ctx.moveTo(x+a*r,y+b*r);ctx.lineTo(x+c*r,y+d*r);};
+  ctx.beginPath();
+  if(k==='fed'){ ctx.moveTo(x-.62*r,y-.25*r); ctx.lineTo(x,y-.62*r); ctx.lineTo(x+.62*r,y-.25*r); ctx.closePath();
+    [-.42,-.14,.14,.42].forEach(c=>L(c,-.16,c,.42)); L(-.66,.52,.66,.52); }
+  else if(k==='coins'){ [.36,.08,-.2].forEach(dy=>{ ctx.moveTo(x+.5*r,y+dy*r); ctx.ellipse(x,y+dy*r,.5*r,.17*r,0,0,Math.PI*2); }); L(-.5,-.2,-.5,.36); L(.5,-.2,.5,.36); }
+  else if(k==='globe'){ ctx.arc(x,y,.6*r,0,Math.PI*2); ctx.moveTo(x+.25*r,y); ctx.ellipse(x,y,.25*r,.6*r,0,0,Math.PI*2); L(-.6,0,.6,0); L(-.52,-.3,.52,-.3); L(-.52,.3,.52,.3); }
+  else if(k==='swap'){ L(-.6,-.22,.55,-.22); L(.55,-.22,.32,-.44); L(.6,.22,-.55,.22); L(-.55,.22,-.32,.44); }
+  else if(k==='lever'){ L(-.62,.3,.62,-.34); ctx.moveTo(x-.16*r,y+.5*r); ctx.lineTo(x,y+.0*r); ctx.lineTo(x+.16*r,y+.5*r); ctx.closePath(); L(.42,-.62,.62,-.34); L(.62,-.34,.34,-.28); }
+  else if(k==='pie'){ const R=.52*r, P=Math.PI;               /* 조각 하나가 빠져나간 원그래프 — 환매로 빠지는 지분 */
+    ctx.moveTo(x-.06*r,y+.06*r); ctx.arc(x-.06*r,y+.06*r,R,0,1.5*P); ctx.closePath();
+    ctx.moveTo(x+.08*r,y-.08*r); ctx.arc(x+.08*r,y-.08*r,R,1.5*P,2*P); ctx.closePath(); }
+  else if(k==='hub'){ ctx.moveTo(x+.17*r,y); ctx.arc(x,y,.17*r,0,Math.PI*2);
+    [0,1,2,3,4,5].forEach(i=>{ const a=i*Math.PI/3+Math.PI/6, c=Math.cos(a), s=Math.sin(a);
+      L(c*.22,s*.22,c*.5,s*.5); ctx.moveTo(x+c*.6*r+.1*r,y+s*.6*r); ctx.arc(x+c*.6*r,y+s*.6*r,.1*r,0,Math.PI*2); }); }
+  else if(k==='shield'){ ctx.moveTo(x,y-.62*r); ctx.lineTo(x+.5*r,y-.42*r); ctx.lineTo(x+.46*r,y+.08*r);
+    ctx.quadraticCurveTo(x+.36*r,y+.46*r,x,y+.64*r); ctx.quadraticCurveTo(x-.36*r,y+.46*r,x-.46*r,y+.08*r); ctx.lineTo(x-.5*r,y-.42*r); ctx.closePath(); L(-.2,0,-.02,.2); L(-.02,.2,.26,-.18); }
+  else if(k==='vault'){ ctx.rect(x-.56*r,y-.5*r,1.12*r,1.0*r); ctx.moveTo(x+.24*r,y); ctx.arc(x,y,.24*r,0,Math.PI*2); L(0,-.24,0,-.36); L(.24,0,.36,0); L(0,.24,0,.36); L(-.24,0,-.36,0); }
+  else if(k==='bond'){ ctx.rect(x-.6*r,y-.42*r,1.2*r,.84*r); L(-.42,-.18,.12,-.18); L(-.42,.04,.12,.04); L(-.42,.24,0,.24); ctx.moveTo(x+.5*r,y+.12*r); ctx.arc(x+.34*r,y+.12*r,.16*r,0,Math.PI*2); }
+  else if(k==='token'){ for(let i=0;i<6;i++){ const a=i*Math.PI/3-Math.PI/2, c=Math.cos(a)*.6*r, sn=Math.sin(a)*.6*r; i?ctx.lineTo(x+c,y+sn):ctx.moveTo(x+c,y+sn); } ctx.closePath();   /* 토큰 — 육각형 안의 1:1 */
+    L(-.24,-.12,.24,-.12); L(-.24,.12,.24,.12); }
+  else if(k==='chip'){ ctx.rect(x-.36*r,y-.36*r,.72*r,.72*r); ctx.rect(x-.14*r,y-.14*r,.28*r,.28*r);   /* 칩 — 데이터센터 담보 */
+    [-.2,0,.2].forEach(c=>{ L(c,-.36,c,-.58); L(c,.36,c,.58); L(-.36,c,-.58,c); L(.36,c,.58,c); }); }
+  else if(k==='cbdc'){ ctx.moveTo(x-.56*r,y-.18*r); ctx.lineTo(x,y-.56*r); ctx.lineTo(x+.56*r,y-.18*r); ctx.closePath();   /* 중앙은행 + 디지털 고리 */
+    ctx.moveTo(x+.34*r,y+.24*r); ctx.arc(x,y+.24*r,.34*r,0,Math.PI*2); L(-.12,.24,.12,.24); }
+}
+function hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
+/* 메달의 화면 위치·반지름 — 그리기와 라벨 충돌 회피가 같은 값을 쓴다 */
+const medScr={};
+function medLayout(T){
+  Object.keys(NODES).forEach(id=>{ const q=proj(medPos(id,T)); medScr[id]={x:q.x,y:q.y,r:MED_R*q.s,z:q.z}; });
+}
+function drawMedals(T){
+  const ids=Object.keys(NODES).sort((a,b)=>medScr[b].z-medScr[a].z);
+  ids.forEach(id=>{ const n=NODES[id], m=medScr[id], r=m.r;
+    if(r<3) return;
+    const key1=id+'|dr', key2=id+'|cr';
+    const h=Math.min(1.5,Math.max(visHeat(key1,T),visHeat(key2,T)));
+    const tone=n.tone==='#FFFFFF'?'#E6EAF2':n.tone;
+    /* 떠 있는 줄 — 메달에서 프레임 위로 */
+    const top=proj({x:n.pos[0],y:n.pos[1]+SH/2+2.2,z:n.pos[2]});
+    ctx.strokeStyle=hexA(tone,.28); ctx.lineWidth=1; ctx.setLineDash([1.5,3]);
+    ctx.beginPath(); ctx.moveTo(m.x,m.y+r); ctx.lineTo(top.x,top.y); ctx.stroke(); ctx.setLineDash([]);
+    /* 원판 — 아래로 떨어지는 그림자 + 테두리 빛 */
+    ctx.save();
+    ctx.shadowColor= h>.05 ? `rgba(255,92,92,${Math.min(1,.5+.5*h)})` : hexA(tone,.45);
+    ctx.shadowBlur = h>.05 ? 10+18*h : 9;
+    ctx.beginPath(); ctx.arc(m.x,m.y,r,0,Math.PI*2);
+    const g=ctx.createRadialGradient(m.x-r*.35,m.y-r*.45,r*.1,m.x,m.y,r);
+    g.addColorStop(0,'rgba(44,54,76,.97)'); g.addColorStop(1,'rgba(14,19,30,.97)');
+    ctx.fillStyle=g; ctx.fill(); ctx.restore();
+    ctx.lineWidth=Math.max(1.2,r*.11)*(id===sel?1.4:1);
+    ctx.strokeStyle= h>.05 ? `rgba(255,${Math.round(150-60*Math.min(1,h))},${Math.round(140-60*Math.min(1,h))},.95)` : hexA(tone, id===sel?.95:.7);
+    if(n.ext) ctx.setLineDash([r*.28,r*.18]);
+    ctx.beginPath(); ctx.arc(m.x,m.y,r,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    /* 위쪽 하이라이트 — 둥근 입체감 */
+    ctx.strokeStyle='rgba(255,255,255,.16)'; ctx.lineWidth=Math.max(1,r*.08);
+    ctx.beginPath(); ctx.arc(m.x,m.y,r*.84,Math.PI*1.1,Math.PI*1.75); ctx.stroke();
+    /* 기호 */
+    ctx.strokeStyle= h>.05 ? '#FFD0C8' : tone; ctx.lineWidth=Math.max(1.1,r*.1); ctx.lineJoin='round'; ctx.lineCap='round';
+    iconPath(ctx,n.icon,m.x,m.y,r*.82); ctx.stroke();
+  });
+}
+/* 카메라 흔들림 — 끌고 있지 않을 때만, 아주 느리게 */
+let swayPrev={a:0,e:0}, idleOn=false;
+const TGT0={x:0,y:-2,z:0}; let camGoal={x:0,y:-2,z:0,z1:1}, camZ=1, distUser=228, follow=true;
+function camTo(ids,zoom){ if(!follow||REDUCED) return;
+  let x=0,y=0,z=0; ids.forEach(id=>{ const p=NODES[id].pos; x+=p[0]; y+=p[1]; z+=p[2]; }); const n=Math.max(1,ids.length);
+  camGoal={x:TGT0.x+(x/n-TGT0.x)*.45, y:TGT0.y+(y/n-TGT0.y)*.45, z:TGT0.z+(z/n-TGT0.z)*.45, z1:zoom}; }
+function camHome(){ camGoal={...TGT0,z1:1}; }
+function swayAt(T){ return {a:.055*Math.sin(T/5200), e:.018*Math.sin(T/3900+1.3)}; }
+function idleLoop(){
+  if(REDUCED || idleOn) return; idleOn=true;
+  const step=()=>{
+    if(document.hidden){ idleOn=false; return; }
+    const T=now();
+    if(!drag){ const s=swayAt(T); az+=s.a-swayPrev.a; el+=s.e-swayPrev.e; swayPrev=s; }
+    const k=.035; tgt.x+=(camGoal.x-tgt.x)*k; tgt.y+=(camGoal.y-tgt.y)*k; tgt.z+=(camGoal.z-tgt.z)*k;
+    camZ+=(camGoal.z1-camZ)*k; dist=distUser*camZ;
+    if(!looping) draw();
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) idleLoop(); });
+
+/* ══════════ 그리기 ══════════ */
+function draw(){
+  if(XR&&XR.on) return;   /* v9: 헤드셋 안에서는 XR 프레임이 그린다 */
+  const T=now(), so=REDUCED?[0,0]:shakeOff(T);
+  CX+=so[0]; CY+=so[1];
+  try{ drawInner(T); } finally { CX-=so[0]; CY-=so[1]; }
+}
+function drawInner(T){
+  medLayout(T);
+  if(GLON) glRender(T);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const items=[];
+
+  /* 바닥 격자 */
+  const GY=-76, GS=112, GN=8;
+  for(let i=0;i<=GN;i++){
+    const t=-GS+ (2*GS*i/GN);
+    items.push({z:1e6, kind:'grid', a:proj({x:t,y:GY,z:-GS}), b:proj({x:t,y:GY,z:GS})});
+    items.push({z:1e6, kind:'grid', a:proj({x:-GS,y:GY,z:t}), b:proj({x:GS,y:GY,z:t})});
+  }
+
+  /* 링크 */
+  LINKS.forEach(L=>{
+    const p0=slabCenter(L.a,L.as), p1=slabCenter(L.b,L.bs);
+    const mid={x:(p0.x+p1.x)/2, y:(p0.y+p1.y)/2, z:(p0.z+p1.z)/2 + 16};
+    const pts=[];
+    for(let i=0;i<=28;i++){
+      const t=i/28, u=1-t;
+      pts.push(proj({
+        x:u*u*p0.x+2*u*t*mid.x+t*t*p1.x,
+        y:u*u*p0.y+2*u*t*mid.y+t*t*p1.y,
+        z:u*u*p0.z+2*u*t*mid.z+t*t*p1.z
+      }));
+    }
+    const zm = pts[14].z;
+    items.push({z:zm, kind:'link', pts, id:L.k});
+  });
+
+  /* 백스톱 */
+  if(fedOn) BACKSTOP.forEach(B=>{
+    const p0=slabCenter('fed','dr'), p1=slabCenter(B.to,B.s);
+    const mid={x:(p0.x+p1.x)/2, y:(p0.y+p1.y)/2, z:(p0.z+p1.z)/2 - 20};
+    const pts=[];
+    for(let i=0;i<=24;i++){
+      const t=i/24,u=1-t;
+      pts.push(proj({
+        x:u*u*p0.x+2*u*t*mid.x+t*t*p1.x,
+        y:u*u*p0.y+2*u*t*mid.y+t*t*p1.y,
+        z:u*u*p0.z+2*u*t*mid.z+t*t*p1.z}));
+    }
+    items.push({z:pts[12].z, kind:'bs', pts});
+  });
+
+  /* 아래층 판 — 출구가 놓이는 자리 */
+  {
+    const PX=96, PZ=26;
+    const q=[[-PX,-PZ],[PX,-PZ],[PX,PZ],[-PX,PZ]].map(v=>proj({x:v[0],y:XY,z:8+v[1]}));
+    items.push({z:1e6-1, kind:'xplane', q});
+  }
+  /* 출구 연결선 [가설] + 출구 판 */
+  Object.entries(EXITS).forEach(([xid,X])=>{
+    const hit=exitHit.has(xid), on=(sel==='x:'+xid);
+    X.from.forEach(nid=>{
+      const n=NODES[nid];
+      const p0={x:n.pos[0], y:n.pos[1]-SH/2, z:n.pos[2]}, p1={x:X.pos[0], y:XY+2, z:X.pos[2]};
+      const mid={x:(p0.x+p1.x)/2, y:(p0.y+p1.y)/2-10, z:(p0.z+p1.z)/2};
+      const pts=[];
+      for(let i=0;i<=20;i++){ const t=i/20,u=1-t;
+        pts.push(proj({x:u*u*p0.x+2*u*t*mid.x+t*t*p1.x, y:u*u*p0.y+2*u*t*mid.y+t*t*p1.y, z:u*u*p0.z+2*u*t*mid.z+t*t*p1.z})); }
+      items.push({z:pts[10].z, kind:'xline', pts, hot:exitFirm.has(nid)&&(hit), weak:!exitFirm.has(nid)&&exitHitFrom.has(nid)&&(hit||exitWeak.has(xid)), on});
+    });
+  });
+
+  /* v11 — 거시 타일과 추정 연결 (2D 대체 그리기) */
+  Object.entries(MACRO).forEach(([mid,M])=>{
+    const p0={x:M.pos[0]*.55,y:XY-1.5,z:8}, p1={x:M.pos[0],y:MY+1.5,z:M.pos[2]}, m={x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2,z:(p0.z+p1.z)/2+6};
+    const pts=[]; for(let i=0;i<=16;i++){ const t=i/16,u=1-t; pts.push(proj({x:u*u*p0.x+2*u*t*m.x+t*t*p1.x,y:u*u*p0.y+2*u*t*m.y+t*t*p1.y,z:u*u*p0.z+2*u*t*m.z+t*t*p1.z})); }
+    items.push({z:pts[8].z, kind:'mline', pts, on:sel==='m:'+mid});
+    const q=[[-14,-7],[14,-7],[14,7],[-14,7]].map(v=>proj({x:M.pos[0]+v[0],y:MY,z:M.pos[2]+v[1]}));
+    items.push({z:q[0].z, kind:'mplate', q, on:sel==='m:'+mid});
+  });
+
+  /* 슬랩 면 */
+  Object.entries(NODES).forEach(([id,n])=>{
+    const bb={x0:1e9,y0:1e9,x1:-1e9,y1:-1e9,z:proj({x:n.pos[0],y:n.pos[1],z:n.pos[2]}).z};
+    nodeBox[id]=bb;
+    ['dr','cr'].forEach(s=>{
+      const c = slabCenter(id,s);
+      const key=id+'|'+s, h = visHeat(key,T), pk=punch(key,T);
+      const base = s==='dr'?DR_C:CR_C;
+      const vp = VT.map(v=>proj({x:c.x+v[0]*SW/2*pk, y:c.y+v[1]*SH/2*pk, z:c.z+v[2]*SD/2*pk}));
+      vp.forEach(p=>{ if(p.x<bb.x0)bb.x0=p.x; if(p.x>bb.x1)bb.x1=p.x; if(p.y<bb.y0)bb.y0=p.y; if(p.y>bb.y1)bb.y1=p.y; });
+      FC.forEach(f=>{
+        const q=f.i.map(k=>vp[k]);
+        const area=(q[1].x-q[0].x)*(q[2].y-q[0].y)-(q[2].x-q[0].x)*(q[1].y-q[0].y);
+        if(area<=0) return;
+        const nr=rotDir(f.n);
+        const d=Math.max(0, nr.x*LIGHT.x+nr.y*LIGHT.y+nr.z*LIGHT.z);
+        const k=.40+.60*d;
+        const col = h>.02 ? mix(base,HOT_C,Math.min(1,h)) : base;
+        const zc=(q[0].z+q[1].z+q[2].z+q[3].z)/4;
+        items.push({z:zc, kind:'face', q, fill:shade(col,k), glow:h});
+      });
+    });
+    /* 프레임 */
+    const fw=SW*2+GAP+4, fh=SH+4, c0=n.pos;
+    const fp=[[-fw/2,-fh/2],[fw/2,-fh/2],[fw/2,fh/2],[-fw/2,fh/2]]
+      .map(v=>proj({x:c0[0]+v[0], y:c0[1]+v[1], z:c0[2]+SD/2+.6}));
+    const bb2=nodeBox[id];
+    fp.forEach(p=>{ if(p.x<bb2.x0)bb2.x0=p.x; if(p.x>bb2.x1)bb2.x1=p.x; if(p.y<bb2.y0)bb2.y0=p.y; if(p.y>bb2.y1)bb2.y1=p.y; });
+    items.push({z:fp[0].z-.5, kind:'frame', q:fp, col:n.tone, sel:(id===sel), ext:!!n.ext});
+    const m=medScr[id]; if(m){ bb2.y0=Math.min(bb2.y0,m.y-m.r-2); bb2.x0=Math.min(bb2.x0,m.x-m.r); bb2.x1=Math.max(bb2.x1,m.x+m.r); }
+  });
+
+  /* 펄스 */
+  pulses.forEach(p=>{
+    const t=(T-p.t0)/p.dur; if(t<0||t>1) return;
+    const q=proj(bezP(p,t));
+    items.push({z:q.z-2, kind:'pulse', q, a:(.55+.45*Math.sin(t*Math.PI))*Math.max(.45,p.w), s:q.s});
+  });
+
+  items.sort((a,b)=>b.z-a.z);
+
+  items.forEach(it=>{
+    if(GLON && GLK.has(it.kind)) return;   /* v5: 이 종류는 WebGL이 그린다 */
+    if(it.kind==='grid'){
+      ctx.strokeStyle='rgba(26,34,49,.55)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(it.a.x,it.a.y); ctx.lineTo(it.b.x,it.b.y); ctx.stroke();
+    }
+    else if(it.kind==='link'){
+      const idl = it.id==='id';
+      ctx.strokeStyle = idl?'rgba(108,143,184,.62)':'rgba(96,110,134,.52)';
+      ctx.lineWidth = idl?1.6:1.3;
+      ctx.setLineDash(idl?[]:[5,5]);
+      ctx.beginPath(); it.pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    else if(it.kind==='bs'){
+      ctx.strokeStyle='rgba(167,139,250,.72)'; ctx.lineWidth=1.5; ctx.setLineDash([4,4]);
+      ctx.beginPath(); it.pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    else if(it.kind==='face'){
+      ctx.fillStyle=it.fill;
+      ctx.beginPath(); it.q.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath();
+      if(it.glow>.05){ ctx.shadowColor='rgba(255,92,92,.75)'; ctx.shadowBlur=18*it.glow; }
+      ctx.fill(); ctx.shadowBlur=0;
+      ctx.strokeStyle='rgba(11,15,23,.42)'; ctx.lineWidth=.6; ctx.stroke();
+    }
+    else if(it.kind==='frame'){
+      ctx.strokeStyle=it.col; ctx.globalAlpha=it.sel?.95:(it.ext?.5:.3); ctx.lineWidth=it.sel?1.8:1;
+      if(it.ext) ctx.setLineDash([3,3]);
+      ctx.beginPath(); it.q.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+    }
+    else if(it.kind==='xplane'){
+      ctx.fillStyle='rgba(212,179,106,.035)'; ctx.strokeStyle='rgba(212,179,106,.22)'; ctx.lineWidth=1;
+      ctx.setLineDash([2,4]);
+      ctx.beginPath(); it.q.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath();
+      ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+    }
+    else if(it.kind==='xline'){
+      ctx.strokeStyle = it.hot?'rgba(240,206,128,.9)':(it.on?'rgba(212,179,106,.7)':(it.weak?'rgba(212,179,106,.48)':'rgba(212,179,106,.26)'));
+      ctx.lineWidth = it.hot||it.on?1.4:1; ctx.setLineDash([1.5,3.5]);
+      ctx.beginPath(); it.pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    else if(it.kind==='xplate'){
+      ctx.fillStyle = it.hot?'rgba(240,206,128,.30)':'rgba(212,179,106,.10)';
+      ctx.strokeStyle = it.hot||it.on?'#F0CE80':'rgba(212,179,106,.6)'; ctx.lineWidth=it.on?1.8:1.1;
+      if(it.hot){ ctx.shadowColor='rgba(240,206,128,.6)'; ctx.shadowBlur=12; }
+      ctx.beginPath(); it.q.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath();
+      ctx.fill(); ctx.shadowBlur=0; ctx.stroke();
+    }
+    else if(it.kind==='mline'){
+      ctx.strokeStyle=it.on?'rgba(124,196,216,.9)':'rgba(124,196,216,.45)'; ctx.lineWidth=it.on?1.5:1.1; ctx.setLineDash([6,2,1.5,2]);
+      ctx.beginPath(); it.pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke(); ctx.setLineDash([]);
+    }
+    else if(it.kind==='mplate'){
+      ctx.fillStyle=it.on?'rgba(124,196,216,.26)':'rgba(124,196,216,.10)'; ctx.strokeStyle=it.on?'#9FD6E6':'rgba(124,196,216,.55)'; ctx.lineWidth=it.on?1.6:1;
+      ctx.beginPath(); it.q.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    else if(it.kind==='pulse'){
+      const r=Math.max(3, 6*it.s*.9);
+      ctx.globalAlpha=Math.max(0,it.a);
+      ctx.fillStyle='#FF5C5C'; ctx.shadowColor='rgba(255,92,92,.9)'; ctx.shadowBlur=14;
+      ctx.beginPath(); ctx.arc(it.q.x,it.q.y,r,0,7); ctx.fill();
+      ctx.shadowBlur=0; ctx.globalAlpha=1;
+    }
+  });
+
+  drawMedals(T);
+  drawFX(T);
+  drawLabels();
+}
+function bezP(p,t){ const u=1-t;
+  return {x:u*u*p.p0.x+2*u*t*p.m.x+t*t*p.p1.x, y:u*u*p.p0.y+2*u*t*p.m.y+t*t*p.p1.y, z:u*u*p.p0.z+2*u*t*p.m.z+t*t*p.p1.z}; }
+/* 화면 섬광과 충격파 고리는 2D 위층에 가산 합성으로 */
+function drawFX(T){
+  if(REDUCED) return;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  if(FX.scr){ const dt=T-FX.scr.t0;
+    if(dt>=0 && dt<1300){ const a=.30*strobe(dt,4,280);
+      if(a>.004){ const q=proj(FX.scr.c), R=Math.max(W,H)*.8;
+        const g=ctx.createRadialGradient(q.x,q.y,0,q.x,q.y,R);
+        g.addColorStop(0,`rgba(255,110,100,${a})`); g.addColorStop(.25,`rgba(255,70,70,${a*.45})`); g.addColorStop(1,'rgba(255,40,40,0)');
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H); } } }
+  FX.rings.forEach(r=>{ const dt=T-r.t0; if(dt<0||dt>r.dur) return;
+    const p=dt/r.dur, e=1-Math.pow(1-p,3), q=proj(r.c), rad=(2+r.R*e)*q.s;
+    const a=r.amp*Math.pow(1-p,1.4);
+    ctx.strokeStyle=`rgba(${r.col},${a})`; ctx.lineWidth=(r.lw||2.6)*(1-p*.55);
+    ctx.shadowColor=`rgba(${r.col},${a})`; ctx.shadowBlur=10;
+    ctx.beginPath(); ctx.arc(q.x,q.y,rad,0,7); ctx.stroke();
+    if(p<.25){ ctx.fillStyle=`rgba(${r.col},${a*.18*(1-p/.25)})`; ctx.fill(); }
+  });
+  ctx.restore();
+}
+
+/* ══════════ 라벨 — 화면 공간 충돌 회피 ══════════
+   각 노드의 두 슬랩 외곽(nodeBox)을 장애물로 두고, 가까운 노드부터
+   위 → 아래 → 오른쪽 → 왼쪽 순으로 빈자리를 찾는다. 다 막히면 부제를 빼고
+   다시 찾고, 그래도 막히면 겹침이 가장 적은 자리에 둔다. */
+const FF = ()=>getComputedStyle(document.body).fontFamily;
+function ovl(a,b){
+  const w=Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0), h=Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0);
+  return (w>0&&h>0)?w*h:0;
+}
+function drawLabels(){
+  const fam=FF(), small = W<560;
+  const fName = (small?'600 12px ':'600 13px ')+fam, fSub=(small?'400 9.5px ':'400 10px ')+fam;
+  const LH = small?13:14, PAD=4;
+  const ids=Object.keys(NODES).sort((a,b)=>(a===sel?-1:b===sel?1:nodeBox[a].z-nodeBox[b].z));
+  const placed=[];
+  const obstacles=ids.map(id=>({id,...nodeBox[id]}));
+  Object.keys(exitRect).forEach(k=>delete exitRect[k]);
+  /* 출구 — 화면을 향한 알약. 좁은 화면에선 약칭만 */
+  Object.entries(EXITS).forEach(([xid,X])=>{
+    const p=proj({x:X.pos[0],y:X.pos[1],z:X.pos[2]});
+    const hot=exitHit.has(xid), weak=exitWeak.has(xid), on=sel==='x:'+xid;
+    ctx.font=(small?'600 10px ':'600 11px ')+'IBM Plex Mono,ui-monospace,monospace';
+    const tw=ctx.measureText(X.short).width, pw=tw+16, ph=small?18:19;
+    const x0=p.x-pw/2, y0=p.y-ph/2;
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(x0,y0,pw,ph,ph/2); else ctx.rect(x0,y0,pw,ph);
+    ctx.fillStyle = hot?'rgba(240,206,128,.30)':(on?'rgba(212,179,106,.20)':'rgba(30,26,16,.92)');
+    if(hot){ ctx.shadowColor='rgba(240,206,128,.65)'; ctx.shadowBlur=14; }
+    ctx.fill(); ctx.shadowBlur=0;
+    ctx.strokeStyle = hot||on?'#F0CE80':(weak?'#E2C47E':'rgba(212,179,106,.7)'); ctx.lineWidth=on?1.8:1.1;
+    if(weak&&!hot) ctx.setLineDash([3,2.5]);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle = hot||on?'#FFF1CC':'#E2C47E';
+    ctx.fillText(X.short, p.x, p.y+.5);
+    let r={id:'x:'+xid, x0:x0, y0:y0, x1:x0+pw, y1:y0+ph};
+    const nm=X.name+' · '+X.freq;
+    ctx.font=fSub; const nw=ctx.measureText(nm).width;
+    const nr={x0:p.x-nw/2-2, y0:y0+ph, x1:p.x+nw/2+2, y1:y0+ph+LH+4};
+    const clash=Object.values(exitRect).some(o=>o._done&&ovl(nr,o)>0);
+    if(!small && !clash){
+      ctx.shadowColor='rgba(11,15,23,.98)'; ctx.shadowBlur=6;
+      ctx.fillStyle = hot||on?'#E6D3A6':'#9C8A63';
+      ctx.fillText(nm, p.x, y0+ph+LH/2+2);
+      ctx.shadowBlur=0;
+      r={id:r.id, x0:Math.min(x0,p.x-nw/2-2), y0, x1:Math.max(x0+pw,p.x+nw/2+2), y1:y0+ph+LH+4};
+    }
+    r._done=true; exitRect[xid]=r; obstacles.push(r);
+  });
+  /* v11 — 거시 타일 알약 */
+  Object.keys(macroRect).forEach(k=>delete macroRect[k]);
+  Object.entries(MACRO).forEach(([mid,M])=>{
+    const p=proj({x:M.pos[0],y:M.pos[1],z:M.pos[2]}), on=sel==='m:'+mid;
+    ctx.font=(small?'600 10px ':'600 11px ')+'IBM Plex Mono,ui-monospace,monospace';
+    const tw=ctx.measureText(M.short).width, pw=tw+16, ph=small?18:19, x0=p.x-pw/2, y0=p.y-ph/2;
+    ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(x0,y0,pw,ph,4); else ctx.rect(x0,y0,pw,ph);
+    ctx.fillStyle=on?'rgba(124,196,216,.28)':'rgba(12,28,34,.92)'; ctx.fill();
+    ctx.strokeStyle=on?'#BFE8F3':'rgba(124,196,216,.75)'; ctx.lineWidth=on?1.8:1.1; ctx.stroke();
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle=on?'#E8F8FC':'#9FD6E6'; ctx.fillText(M.short,p.x,p.y+.5);
+    let r={id:'m:'+mid,x0,y0,x1:x0+pw,y1:y0+ph};
+    if(!small){ const nm=M.name+' · 월'; ctx.font=fSub; const nw=ctx.measureText(nm).width;
+      ctx.shadowColor='rgba(11,15,23,.98)'; ctx.shadowBlur=6; ctx.fillStyle=on?'#CFEFF7':'#6FA3B3'; ctx.fillText(nm,p.x,y0+ph+LH/2+2); ctx.shadowBlur=0;
+      r={id:r.id,x0:Math.min(x0,p.x-nw/2-2),y0,x1:Math.max(x0+pw,p.x+nw/2+2),y1:y0+ph+LH+4}; }
+    macroRect[mid]=r; obstacles.push(r);
+  });
+  ['ctrl','info','trace'].forEach(pid=>{
+    const el=document.getElementById(pid);
+    if(!el || getComputedStyle(el).display==='none') return;
+    const r=el.getBoundingClientRect();
+    if(r.width) obstacles.push({id:'#'+pid,x0:r.left,y0:r.top,x1:r.right,y1:r.bottom});
+  });
+
+  ids.forEach(id=>{
+    const n=NODES[id], bb=nodeBox[id];
+    ctx.font=fName; const wN=ctx.measureText(n.name).width;
+    ctx.font=fSub;  const wS=ctx.measureText(n.sub).width;
+    let best=null;
+    for(const withSub of [true,false]){
+      const w=Math.max(wN, withSub?wS:0)+6, h=withSub?LH*2+2:LH+2;
+      const cx=(bb.x0+bb.x1)/2, cy=(bb.y0+bb.y1)/2;
+      const cand=[
+        {x0:cx-w/2, y0:bb.y0-PAD-h},          /* 위 */
+        {x0:cx-w/2, y0:bb.y1+PAD},            /* 아래 */
+        {x0:bb.x1+PAD+2, y0:cy-h/2},          /* 오른쪽 */
+        {x0:bb.x0-PAD-2-w, y0:cy-h/2}         /* 왼쪽 */
+      ].map(c=>({...c, x1:c.x0+w, y1:c.y0+h, withSub}));
+      for(const c of cand){
+        let o=0;
+        obstacles.forEach(ob=>{ if(ob.id!==id) o+=ovl(c,ob); });
+        placed.forEach(pl=>{ o+=ovl(c,pl)*1.5; });
+        if(c.x0<2||c.x1>W-2||c.y0<2||c.y1>H-2) o+=200;
+        if(!best || o<best.o-.5) best={...c,o};
+        if(o===0) break;
+      }
+      if(best.o===0) break;
+    }
+    placed.push(best);
+
+    const hot = (heat[id+'|dr']>.05 || heat[id+'|cr']>.05);
+    const mx=(best.x0+best.x1)/2;
+    /* 옆으로 밀려난 라벨은 짧은 지시선으로 제 노드에 묶는다 */
+    const cyB=(bb.y0+bb.y1)/2, cyL=best.y1-LH/2-1;
+    let lead=null;
+    if(best.x0>=bb.x1) lead=[bb.x1+1, cyB, best.x0+1, cyL];
+    else if(best.x1<=bb.x0) lead=[bb.x0-1, cyB, best.x1-1, cyL];
+    if(lead){
+      ctx.strokeStyle='rgba(135,146,168,.55)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(lead[0],lead[1]); ctx.lineTo(lead[2],lead[3]); ctx.stroke();
+    }
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(11,15,23,.98)'; ctx.shadowBlur=7;
+    ctx.globalAlpha = best.o>0 ? .72 : 1;
+    ctx.font=fName;
+    ctx.fillStyle = hot?'#FF7A7A' : (id===sel?'#FFFFFF':'#DCE3EE');
+    ctx.fillText(n.name, mx, best.y1-LH/2-1);
+    if(best.withSub){
+      ctx.font=fSub; ctx.fillStyle = n.ext?'#7F8AA3':'#8792A8';
+      ctx.fillText(n.sub, mx, best.y0+LH/2+1);
+    }
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  });
+}
+
+function mix(a,b,t){
+  const ar=(a>>16)&255, ag=(a>>8)&255, ab=a&255;
+  const br=(b>>16)&255, bg=(b>>8)&255, bb=b&255;
+  return ((Math.round(ar+(br-ar)*t)<<16) | (Math.round(ag+(bg-ag)*t)<<8) | Math.round(ab+(bb-ab)*t));
+}
+
+/* ══════════ 조작 ══════════ */
+/* 패널이 가리지 않는 빈 영역을 찾고, 현재 각도에서 장면이 실제로 차지하는 범위를
+   재서 그 영역에 맞춘다 (회전 중에는 다시 맞추지 않는다 — 크기가 튀지 않게) */
+function freeRect(){
+  const r={x0:0,y0:0,x1:W,y1:H};
+  const c=document.getElementById('ctrl').getBoundingClientRect();
+  const i=document.getElementById('info').getBoundingClientRect();
+  const t=document.getElementById('trace');
+  if(W>880){
+    r.x0=c.right+8; r.x1=i.left-8;
+    if(t.classList.contains('show')) r.y1=t.getBoundingClientRect().top-4;
+  } else { r.y0=c.bottom+4; r.y1=i.top-4; }
+  if(r.x1-r.x0<160){ r.x0=0; r.x1=W; }
+  if(r.y1-r.y0<160){ r.y0=0; r.y1=H; }
+  return r;
+}
+function fit(){
+  const f=freeRect();
+  CX=0; CY=0; focal=1;
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  Object.values(NODES).forEach(n=>{
+    [[-SW-GAP/2-2,-SH/2-2],[SW+GAP/2+2,-SH/2-2],[-SW-GAP/2-2,SH/2+2],[SW+GAP/2+2,SH/2+2]].forEach(v=>{
+      [-SD/2,SD/2].forEach(dz=>{
+        const p=proj({x:n.pos[0]+v[0],y:n.pos[1]+v[1],z:n.pos[2]+dz});
+        x0=Math.min(x0,p.x); x1=Math.max(x1,p.x); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y);
+      });
+    });
+  });
+  Object.values(EXITS).forEach(X=>{
+    [[-16,-8],[16,-8],[-16,8],[16,8]].forEach(v=>{
+      const p=proj({x:X.pos[0]+v[0],y:XY,z:X.pos[2]+v[1]});
+      x0=Math.min(x0,p.x); x1=Math.max(x1,p.x); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y);
+    });
+  });
+  Object.values(MACRO).forEach(M=>{
+    [[-16,-8],[16,-8],[-16,8],[16,8]].forEach(v=>{
+      const p=proj({x:M.pos[0]+v[0],y:MY,z:M.pos[2]+v[1]});
+      x0=Math.min(x0,p.x); x1=Math.max(x1,p.x); y0=Math.min(y0,p.y); y1=Math.max(y1,p.y);
+    });
+  });
+  /* 라벨 여유: 위로 두 줄, 좌우로 반 라벨 폭 */
+  const mx=W<560?16:30, myT=W<560?30:34, myB=W<560?18:22;
+  const sx=(f.x1-f.x0-2*mx)/(x1-x0), sy=(f.y1-f.y0-myT-myB)/(y1-y0);
+  focal=Math.max(120, Math.min(760, sx, sy));
+  CX=(f.x0+mx+f.x1-mx)/2 - (x0+x1)/2*focal;
+  CY=(f.y0+myT+f.y1-myB)/2 - (y0+y1)/2*focal;
+}
+function resize(){
+  W=innerWidth; H=innerHeight; DPR=Math.min(devicePixelRatio||1,2);
+  cv.width=W*DPR; cv.height=H*DPR; cv.style.width=W+'px'; cv.style.height=H+'px';
+  glc.width=W*DPR; glc.height=H*DPR; glc.style.width=W+'px'; glc.style.height=H+'px';
+  /* 모바일에서 시트를 펼친 동안엔 지도를 다시 맞추지 않는다 — 시트 뒤에 그대로 둔다 */
+  if(!(W<=880 && sheetOpen)) fit();
+  draw();
+}
+addEventListener('resize', resize);
+
+let drag=false, px=0, py=0, moved=0;
+const ptrs=new Set();
+cv.addEventListener('pointerdown', e=>{
+  ptrs.add(e.pointerId);
+  if(ptrs.size>1){ drag=false; moved=99; return; }   /* 두 손가락이면 회전·선택 대신 확대 */
+  drag=true;moved=0;px=e.clientX;py=e.clientY;cv.classList.add('drag');cv.setPointerCapture(e.pointerId);
+});
+const endPtr=e=>{
+  ptrs.delete(e.pointerId);
+  cv.classList.remove('drag');
+  if(drag && moved<6 && e.type==='pointerup') pick(e.clientX, e.clientY);
+  drag=false;
+};
+cv.addEventListener('pointerup', endPtr);
+cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('pointermove', e=>{
+  if(!drag || ptrs.size>1) return;
+  const dx=e.clientX-px, dy=e.clientY-py;
+  moved += Math.abs(dx)+Math.abs(dy);
+  az -= dx*.006;
+  el = Math.max(-.7, Math.min(1.1, el + dy*.005));
+  px=e.clientX; py=e.clientY; draw();
+});
+cv.addEventListener('wheel', e=>{
+  e.preventDefault();
+  distUser=Math.max(130, Math.min(460, distUser+e.deltaY*.4)); dist=distUser*camZ; draw();
+},{passive:false});
+
+let pd=0;
+cv.addEventListener('touchstart', e=>{
+  if(e.touches.length===2) pd=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+},{passive:true});
+cv.addEventListener('touchmove', e=>{
+  if(e.touches.length===2 && pd){
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    distUser=Math.max(130, Math.min(460, distUser-(d-pd)*.7)); dist=distUser*camZ; pd=d; draw();
+  }
+},{passive:true});
+
+function pick(cx,cy){
+  for(const [mid,r] of Object.entries(macroRect)){
+    if(cx>=r.x0-4&&cx<=r.x1+4&&cy>=r.y0-4&&cy<=r.y1+4){ sel='m:'+mid; infoMode='node'; refresh(); return; }
+  }
+  for(const [xid,r] of Object.entries(exitRect)){
+    if(cx>=r.x0-4&&cx<=r.x1+4&&cy>=r.y0-4&&cy<=r.y1+4){ sel='x:'+xid; infoMode='node'; refresh(); return; }
+  }
+  let best=null, bd=1e9;
+  Object.keys(NODES).forEach(id=>{
+    ['dr','cr'].forEach(s=>{
+      const p=proj(slabCenter(id,s));
+      const r=Math.max(22, SW*.6*p.s);
+      const d=Math.hypot(p.x-cx, p.y-cy);
+      if(d<r && p.z<bd){ bd=p.z; best={id,s}; }
+    });
+  });
+  if(best){ sel=best.id; setSide(best.s); infoMode='node';
+    if(scen!=='custom'){ scen='custom'; scenCard(); document.getElementById('cust').open=true; }
+    refresh(); }
+}
+
+/* ══════════ UI ══════════ */
+const elInfo=document.getElementById('info'), elHint=document.getElementById('hint');
+const elFire=document.getElementById('fire');
+const bDr=document.getElementById('bDr'), bCr=document.getElementById('bCr'), bFed=document.getElementById('bFed');
+
+function setSide(s){ side=s; bDr.classList.toggle('on',s==='dr'); bCr.classList.toggle('on',s==='cr'); }
+bDr.addEventListener('click',()=>{setSide('dr');refresh();});
+bCr.addEventListener('click',()=>{setSide('cr');refresh();});
+document.getElementById('bCam').addEventListener('click',e=>{ follow=!follow; e.currentTarget.classList.toggle('on',follow);
+  e.currentTarget.textContent='카메라 따라가기 — '+(follow?'켜짐':'꺼짐'); if(!follow) camHome(); });
+bFed.addEventListener('click',()=>{
+  fedOn=!fedOn; bFed.classList.toggle('on',fedOn);
+  document.getElementById('fedState').textContent = fedOn?'켜짐':'꺼짐';
+  refresh(); draw();
+});
+
+let sheetOpen=false, mTraceHTML='';
+/* v8 — 오른쪽 패널 모드: node(주체 정보) / story(파급 설명) / normal(평시) */
+let infoMode='normal', scen='normal', story=[], storyShown=0, storyNew=-1, storyTitle='';
+const scList=document.getElementById('scList'), scSel=document.getElementById('scSel'), scCard=document.getElementById('scCard');
+scList.innerHTML=SCEN.map((S,i)=>`<button class="scb${S.id==='normal'?' nm':''}" data-i="${i}"><span class="k">${S.k}</span><span>${S.t}</span></button>`).join('');
+scSel.innerHTML=SCEN.map((S,i)=>`<option value="${i}">${S.id==='normal'?S.t:S.k+' · '+S.t}</option>`).join('')+'<option value="-1">직접 고르기 (노드 누르기)</option>';
+function scenCard(){
+  const S=SCEN.find(s=>(s.id||s.k)===scen);
+  scList.querySelectorAll('.scb').forEach(b=>b.classList.toggle('on', (SCEN[+b.dataset.i].id||SCEN[+b.dataset.i].k)===scen));
+  const si=SCEN.findIndex(s=>(s.id||s.k)===scen); scSel.value=String(si);
+  if(!S){ scCard.innerHTML=''; return; }
+  scCard.innerHTML=`<div class="scard${S.id==='normal'?' nm':''}"><h4>${S.t}</h4><div class="kind">${S.kind}</div><p>${S.d}</p><p>${S.c}</p>${S.id==='normal'?'':`<p class="note">${SC_NOTE}</p>`}</div>`;
+}
+function runScen(i){
+  const S=SCEN[i]; if(!S) return;
+  scen=S.id||S.k;
+  if(S.id==='normal'){ goNormal(); scenCard(); return; }
+  sel=S.node; setSide(S.side); scenCard(); fire(S);
+}
+scList.addEventListener('click',e=>{ const b=e.target.closest('.scb'); if(b) runScen(+b.dataset.i); });
+scSel.addEventListener('change',()=>{ const i=+scSel.value; if(i>=0) runScen(i); else { scen='custom'; scenCard(); infoMode='node'; refresh(); } });
+function goNormal(){
+  camHome();
+  timers.forEach(clearTimeout); timers=[];
+  Object.keys(heat).forEach(k=>heat[k]=0); pulses.length=0;
+  FX.flash=[]; FX.rings=[]; FX.shakes=[]; FX.lit=[]; FX.scr=null; FX.xflash=-1e9;
+  exitHit=new Set(); exitWeak=new Set(); exitHitFrom=new Set(); exitFirm=new Set();
+  story=[]; storyShown=0; mTraceHTML=''; infoMode='normal';
+  document.getElementById('trace').classList.remove('show');
+  const mt=document.getElementById('mtrace'); if(mt) mt.innerHTML='';
+  refresh(); resize();
+}
+function normalPanel(){
+  elHint.textContent='노드를 클릭해서 고릅니다.'; elFire.disabled=false;
+  elInfo.classList.toggle('open', sheetOpen);
+  elInfo.innerHTML=`
+    <div class="ihead"><div><h2>평시</h2><p class="sub">충격 없음 · 정상 회전</p></div>
+      <button class="more" aria-expanded="${sheetOpen}">${sheetOpen?'접기 ▾':'자세히 ▴'}</button></div>
+    <div class="ibody">
+    <div class="xrow"><span class="ttl">읽는 법</span><p>노드마다 <b>왼쪽 판이 차변(자산), 오른쪽 판이 대변(부채)</b>이다. 선 하나는 한 주체의 차변과 다른 주체의 대변이 같은 거래라는 뜻이다.</p></div>
+    <div class="xrow"><span class="ttl">평시에 도는 것</span><p>MMF 현금 → 딜러 repo → 레버리지 펀드의 국채 보유, 재무부 발행 → 딜러 재고 → 최종 보유자. 매일 만기가 오고 다시 빌린다.</p></div>
+    <div class="xrow"><span class="ttl">충격을 넣으면</span><p>왼쪽에서 시나리오를 고르면 그 주체의 한 면에 충격이 들어가고, 여기에 <b>파급 경로가 한 단계씩</b> 설명된다. 실선(항등식)은 회계가 보증하고, 점선(행동 경로)은 그렇게 움직였는지 따로 관측해야 한다.</p></div>
+    <div class="rrow"><span class="ttl">현재 위험 층 (v12 · 117 v2 반영 v14)</span><p>분홍 점선 노드 셋 — 스테이블코인(L14), 해외 CBDC(L15), AI 사모신용(L16)은 <b>기준일 2026-10-26의 후보</b>다(부록 117). 사례 판정이 아니고, 연결은 모두 [가설]이다.</p></div>
+    <div id="note">해설·탐색용. 지도는 <b>메커니즘</b>을 보여 줄 뿐 크기를 말하지 않는다 — 크기는 2층(추정)의 몫이다.</div></div>`;
+  draw();
+}
+function storyPanel(){
+  elInfo.classList.toggle('open', sheetOpen);
+  const items=story.slice(0,storyShown).map((e,i)=>`<li class="${e.cls}${i===storyNew?' new':''}">${e.html}</li>`).join('');
+  const done=storyShown>=story.length;
+  elInfo.innerHTML=`
+    <div class="ihead"><div><h2>파급 설명</h2><p class="sub">${storyTitle}</p></div>
+      <button class="more" aria-expanded="${sheetOpen}">${sheetOpen?'접기 ▾':'자세히 ▴'}</button></div>
+    <div id="mtrace">${mTraceHTML}</div>
+    <div class="ibody"><ol class="story">${items}</ol>${done?'':'<div class="stwait">… 전파 중</div>'}
+    <div id="note" style="margin-top:8px">세기는 지도가 정한 감쇠(항등식·행동·백스톱)일 뿐 추정치가 아니다. <b>크기는 2층의 몫</b>이다.</div></div>`;
+  const b=elInfo.querySelector('.ibody'); if(storyNew>=0) elInfo.scrollTop=elInfo.scrollHeight;
+  draw();
+}
+function buildStory(steps, S){
+  const out=[];
+  steps.forEach(s=>{
+    const nm=s.id?NODES[s.id].name:'';
+    if(s.first){
+      const items=NODES[s.id][s.s].join(' · ');
+      out.push({at:0, cls:'', html:`<span class="hd">${nm}<span class="sd ${s.s}">${FACE[s.s]}</span><span class="tg sh">충격</span></span>
+        <span class="rw"><i>어디</i>${items}</span><span class="rw"><i>무엇</i>${S&&S.d?S.d:(s.s==='cr'?'조달(부채) 쪽이 빠진다.':'보유 자산의 가치나 유동성이 깎인다.')}</span>${NODES[s.id].limit?`<span class="rw ev"><i>병목</i>${NODES[s.id].limit.t}</span>`:''}`});
+    } else if(s.internal){
+      out.push({at:s.at+260, cls:'sub'+(s.weak?' weak':''), html:BAL[s.s](nm)+`<span class="rw"><i>${s.s==='dr'?'자산':'부채'}</i>${NODES[s.id][s.s].join(' · ')}</span>`});
+    } else if(s.damped){
+      const B=BACKSTOP.find(b=>b.t===s.tool);
+      out.push({at:s.at, cls:'fedl', html:`<span class="hd">연준 · ${s.tool}<span class="tg fd">백스톱</span></span>${B?B.d+'. ':''}뒤쪽 세기를 약 1/4로 줄인다 — 끊은 게 아니라 <b>연준 대차대조표로 옮긴 것</b>이다.`});
+    } else if(s.link){
+      const i=LINKS.indexOf(s.link), from=NODES[s.from].name, L=LINK_WHY[i]||{w:'',y:'',e:''};
+      out.push({at:s.at, cls:s.weak?'weak':'', html:`<span class="hd">${from}<span class="sd ${s.fs}">${s.fs==='dr'?'차변':'대변'}</span> → ${nm}<span class="sd ${s.s}">${s.s==='dr'?'차변':'대변'}</span>${s.link.k==='id'?'<span class="tg id">항등식</span>':'<span class="tg bh">행동 경로</span>'}</span>
+        <span class="rw"><i>무엇</i>${L.w}</span><span class="rw"><i>왜</i>${L.y}</span><span class="rw ev"><i>근거</i>${L.e}${s.weak&&s.link.k==='id'?' 앞 단계가 행동 경로라 이 단계도 <b>조건부</b>다.':''}</span>`});
+    }
+  });
+  return out;
+}
+
+
+elInfo.addEventListener('click', e=>{
+  const tg=e.target.closest('[data-se],[data-pce]');
+  if(tg){ if(tg.dataset.se) mSE=tg.dataset.se; if(tg.dataset.pce) mPCE=tg.dataset.pce; refresh(); return; }
+  if(e.target.closest('#toStory')){ infoMode='story'; refresh(); return; }
+  if(!e.target.closest('.more')) return;
+  sheetOpen=!sheetOpen; refresh(); resize();
+});
+
+const GRADE={exact:['규칙 — 정확','g-exact'],meas:['한 사례에서 측정','g-meas'],none:['숫자 없음','g-none']};
+
+function exitPanel(xid){
+  const X=EXITS[xid];
+  elHint.textContent = X.name+' 선택됨 — 출구라서 충격을 넣지 않는다';
+  elFire.disabled=true;
+  elInfo.classList.toggle('open', sheetOpen);
+  elInfo.innerHTML = `
+    <div class="ihead"><div><h2>${X.name}</h2><p class="sub">${X.short} · ${X.freq}<span class="sm"> · 출구</span></p></div>
+      <button class="more" aria-expanded="${sheetOpen}">${sheetOpen?'접기 ▾':'자세히 ▴'}</button></div>
+    <div id="mtrace">${mTraceHTML}</div>
+    <div class="ibody">
+    <span class="ext xb">출구 — 대차대조표가 아니다 · 연결은 [가설]</span>
+    <div class="xrow"><span class="ttl">무엇</span><p>${X.what}</p></div>
+    <div class="xrow"><span class="ttl">왜 이 다리인가</span><p>${X.why}</p></div>
+    <div class="xrow"><span class="ttl">말하지 않는 것</span><p>${X.not}</p></div>
+    ${Q1X[xid]?`<div class="mrow"><span class="ttl">2층 Q1 — 플러밍 → 이 출구</span>${Q1X[xid].rows.length?`<table class="q1t">${Q1X[xid].rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')}</table>`:''}<p style="margin-top:4px">${Q1X[xid].note?Q1X[xid].note+' ':''}${xid==='nfci'?'':'일곱 연결 모두 세 사양에서 Holm 후 비유의. <b>연결선은 [가설] 그대로</b>이고 색·굵기를 바꾸지 않는다.'}</p></div>`:''}
+    <div class="xrow"><span class="ttl">지도에서 들어오는 자리</span>
+      <p>${X.from.length? X.from.map(id=>`<span class="xn ${exitFirm.has(id)?'on':(exitHitFrom.has(id)?'wk':'')}">${NODES[id].name}</span>`).join(' ') : '지도 전체 — 연결선 없음'}</p></div>
+    <div class="xrow"><span class="ttl">출처</span><p class="mono">${X.src}</p></div>
+    <div id="note">크기는 이 지도가 말하지 않는다 — <b>2층(추정)의 몫</b>이다. 그리고 거시는 하류의 끝이 아니라, 연준 반응함수와 재정적자를 거쳐 <b>지도 위쪽(연준·재무부)으로 되돌아온다.</b></div></div>`;
+  draw();
+}
+
+/* v11 — 거시 타일 패널: 후보 4 × 지평 1–24 작은 그래프 묶음 */
+function mChart(c,y,sh,yr){
+  const W2=300,H2=74,L=24,R=6,T=6,B=14, h=c.b.length;
+  const b=sh==='main'?c.b:c.bN, lo=sh==='main'?c.lo:c.loN, hi=sh==='main'?c.hi:c.hiN;
+  const X=i=>L+(W2-L-R)*i/(h-1), Y=v=>T+(H2-T-B)*(yr[1]-v)/(yr[1]-yr[0]);
+  const band=lo.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')+' '+hi.map((v,i)=>[i,v]).reverse().map(([i,v])=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const line=b.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('');
+  const tick=v=>(v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(1);
+  return `<svg class="mchart" viewBox="0 0 ${W2} ${H2}" role="img" aria-label="지평 1–24개월 반응, 95% 신뢰대">
+    <line x1="${L}" x2="${W2-R}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="#3A4558" stroke-width="1"/>
+    <line x1="${X(11).toFixed(1)}" x2="${X(11).toFixed(1)}" y1="${T}" y2="${H2-B}" stroke="#2C4C57" stroke-width="1" stroke-dasharray="2 2"/>
+    <polygon points="${band}" fill="rgba(124,196,216,.16)"/>
+    <path d="${line}" fill="none" stroke="#7CC4D8" stroke-width="1.6" stroke-dasharray="6 2 1.5 2"/>
+    <circle cx="${X(11).toFixed(1)}" cy="${Y(b[11]).toFixed(1)}" r="2.6" fill="#BFE8F3"/>
+    <text x="${L-4}" y="${(T+4).toFixed(1)}" fill="#5A6478" font-size="8.5" text-anchor="end">${tick(yr[1])}</text>
+    <text x="${L-4}" y="${(H2-B).toFixed(1)}" fill="#5A6478" font-size="8.5" text-anchor="end">${tick(yr[0])}</text>
+    <text x="${L-4}" y="${(Y(0)+3).toFixed(1)}" fill="#5A6478" font-size="8.5" text-anchor="end">0</text>
+    ${[1,6,12,18,24].map(k=>`<text x="${X(k-1).toFixed(1)}" y="${H2-3}" fill="#5A6478" font-size="8.5" text-anchor="middle">${k}</text>`).join('')}
+  </svg>`;
+}
+function macroPanel(mid){
+  const M=MACRO[mid], yk=(mid==='pce'&&mPCE==='head')?M.y2:M.y, D=L2P[yk];
+  elHint.textContent=M.name+' 선택됨 — 거시 타일이라 충격을 넣지 않는다'; elFire.disabled=true;
+  elInfo.classList.toggle('open', sheetOpen);
+  let mn=0,mx=0; CANDS.forEach(([k])=>{ const c=D[k]; const lo=mSE==='main'?c.lo:c.loN, hi=mSE==='main'?c.hi:c.hiN; lo.forEach(v=>mn=Math.min(mn,v)); hi.forEach(v=>mx=Math.max(mx,v)); });
+  const pad=(mx-mn)*.06, yr=[mn-pad,mx+pad];
+  const charts=CANDS.map(([k,nm])=>{ const c=D[k], b=(mSE==='main'?c.b:c.bN)[11], p=(mSE==='main'?c.p:c.pN)[11];
+    return `<div class="mlab"><span>${nm}</span><span${p<.05?' class="sig"':''}>h=12 ${b>=0?'+':'−'}${Math.abs(b).toFixed(3)} · p ${p.toFixed(3)}</span></div>${mChart(c,yk,mSE,yr)}`; }).join('');
+  const verdict = M.rep
+    ? `<div class="mrow"><span class="ttl">판정 — F-L2-1 성립</span><p>대표 통계는 <b>h=12</b> 하나(점선 세로선)로 미리 정했고 후보 4개를 Holm 보정했다. [주] NFCI 통제에서 4개 모두 Holm p = 1.000, [부] 신용·레버리지+VIX 통제에서 최소 0.424.</p></div>
+       <div class="mrow"><span class="ttl">결론 문구 (00 §15-1과 함께)</span><p>이 표본에서 네 플러밍 구성 변수는 NFCI·EBP를 통제한 뒤 산업생산 12개월 누적 반응에 추가 예측력을 보이지 않는다. 이것은 <b>"플러밍이 거시에 중요하지 않다"는 뜻이 아니다</b>. 검정이 물은 것은 EBP·NFCI 바깥의 경로다.</p></div>
+       <div class="mrow"><span class="ttl">두 표준오차 (D20-2)</span><p>레버리지 펀드 순숏은 NW에서 Holm <b>0.029</b>로 유의하고 [주] HC1에서는 0.353(Holm 1.000)이다. 24개 지평 중 9개(38%)에서 판단이 갈려 둘 다 싣는다. <b>판정은 [주]를 따른다.</b> 위 단추로 바꿔 볼 수 있다.</p></div>`
+    : `<div class="mrow"><span class="ttl">보조 결과변수 — Holm 가족 밖</span><p>대표 통계는 산업생산 h=12 하나다. 여기서는 <b>서술용</b>으로만 그린다. 아래에 p&lt;0.05가 보여도 결론으로 쓰지 않는다${mid==='pce'?' — [주] HC1 기준 근원 PCE에서 레버리지 펀드(p 0.047), 헤드라인에서 해외 공적 보관(p 0.006)이 여기에 해당한다. 달러 관련 경로라 헤드라인을 함께 보인다(91 §4-2)':''}.</p></div>`;
+  elInfo.innerHTML=`
+    <div class="ihead"><div><h2>${M.name}</h2><p class="sub">${M.short} · 월 · 2층 Q2<span class="sm"> · 거시 타일</span></p></div>
+      <button class="more" aria-expanded="${sheetOpen}">${sheetOpen?'접기 ▾':'자세히 ▴'}</button></div>
+    <div class="ibody">
+    <span class="ext mb">거시 타일 — 추정 결과 · 예측력 검정, 인과 아님</span>
+    <div class="mrow"><span class="ttl">무엇을 그렸나</span><p>후보 x가 1표준편차 움직일 때 ${M.name}의 h개월 누적 변화(${M.unit}). 점-쇄선은 계수, 음영 띠는 95% 신뢰대, 네 그래프의 세로 눈금은 같다.</p></div>
+    <div class="mtog"><button data-se="main" class="${mSE==='main'?'on':''}">[주] HC1</button><button data-se="alt" class="${mSE==='alt'?'on':''}">[부] Newey–West</button></div>
+    ${mid==='pce'?`<div class="mtog"><button data-pce="core" class="${mPCE==='core'?'on':''}">근원 [주]</button><button data-pce="head" class="${mPCE==='head'?'on':''}">헤드라인 [부]</button></div>`:''}
+    ${charts}
+    ${verdict}
+    <div class="mrow"><span class="ttl">이 검정이 가리지 못하는 것 — 한계 14·15</span><p><b>평시·선형·월간</b> 검정이다. 수일 단위 동학과 위기 때 비선형 경로는 이 결과로 가려지지 않는다. 일별 플러밍 자료가 없어 월중 극값 검정(F-L2-7)은 <b>불가</b>, 위기 구간 상호작용(F-L2-6)은 <b>미실시</b>다. 최소 탐지 효과는 약 0.8–1.3%(7장 §7.7.2).</p></div>
+    <div class="mrow"><span class="ttl">지도와의 관계</span><p>2층 결과는 1층 지도의 <b>어떤 연결 상태도 바꾸지 않는다</b>(00 §9·§15-1). 추정 연결(청록 점-쇄선)은 항등식 실선·행동 점선과 다른 종류다.</p></div>
+    <div class="mfix">빈티지 <b>2026-10-24</b> · 표본 2013-04~2026-09 · 통제 [주] NFCI·EBP·2년 금리·거시 시차·2020-03~06 더미 · 국소 투영 시차 6 · 95% 신뢰대 · <b>예측력 ≠ 인과</b> · 출처 106 / 7장 §7.7</div></div>`;
+  draw();
+}
+
+function refresh(){
+  if(XR&&XR.on) XR.dirty=true;
+  if(sel.startsWith('x:')) return exitPanel(sel.slice(2));
+  if(sel.startsWith('m:')) return macroPanel(sel.slice(2));
+  if(infoMode==='normal') return normalPanel();
+  if(infoMode==='story') return storyPanel();
+  const n=NODES[sel];
+  elHint.textContent = n.name+' 선택됨';
+  elFire.disabled=false;
+  const bs = fedOn ? BACKSTOP.filter(b=>b.to===sel) : [];
+  elInfo.classList.toggle('open', sheetOpen);
+  elInfo.innerHTML = `
+    <div class="ihead"><div><h2>${n.name}</h2><p class="sub">${n.sub}${n.limit?`<span class="sm"> · <span class="grade ${GRADE[n.limit.g][1]}">${GRADE[n.limit.g][0]}</span></span>`:''}</p></div>
+      <button class="more" aria-expanded="${sheetOpen}">${sheetOpen?'접기 ▾':'자세히 ▴'}</button></div>
+    <div id="mtrace">${mTraceHTML}</div>
+    <div class="ibody">
+    ${story.length?'<button class="back" id="toStory">← 파급 설명으로</button>':''}
+    ${n.risk?`<span class="ext rk">현재 위험 · ${n.risk} 후보 · 기준일 2026-10-26 · 부록 117</span>`:(n.ext?'<span class="ext">원고 범위 밖 — 해설용 노드</span>':'')}
+    <div class="tacct">
+      <div class="tcol dr ${side==='dr'?'hot':''}"><h3>차변 · 자산</h3>
+        <ul>${n.dr.map(x=>'<li>'+x+'</li>').join('')}</ul></div>
+      <div class="tcol cr ${side==='cr'?'hot':''}"><h3>대변 · 부채</h3>
+        <ul>${n.cr.map(x=>'<li>'+x+'</li>').join('')}</ul></div>
+    </div>
+    ${n.limit?`<div class="lim"><span class="ttl">병목</span>
+      <p>${n.limit.t}</p>
+      <span class="grade ${GRADE[n.limit.g][1]}">${GRADE[n.limit.g][0]}</span>
+      <p style="margin-top:7px;font-size:11px;color:var(--muted)">${n.limit.d}</p></div>`:''}
+    ${bs.length?`<div class="lim" style="border-color:var(--fed)">
+      <span class="ttl" style="color:var(--fed)">연준이 붙는 자리</span>
+      ${bs.map(b=>`<p><b style="color:var(--fed)">${b.t}</b> → ${b.s==='dr'?'차변':'대변'}<br>
+        <span style="font-size:10.5px;color:var(--muted)">${b.d}</span></p>`).join('')}</div>`:''}
+    ${n.rk?`<div class="rrow"><span class="ttl">상태</span><p>${n.rk.st}</p></div>
+    <div class="rrow"><span class="ttl">관측된 것</span><p>${n.rk.obs}</p></div>
+    <div class="rrow"><span class="ttl">[해석 — 주]</span><p>${n.rk.main}</p></div>
+    <div class="rrow"><span class="ttl">[해석 — 부]</span><p>${n.rk.sub}</p></div>
+    <div class="rrow"><span class="ttl">말하지 않는 것</span><p>${n.rk.no}</p></div>`:''}
+    <div id="note">${n.note}${n.risk?' <b>이 노드는 1층 지도의 기존 연결 상태와 2층 결론을 바꾸지 않는다.</b>':''}</div></div>`;
+  draw();
+}
+
+/* ══════════ 전파 ══════════ */
+const other=s=>s==='dr'?'cr':'dr';
+const KO=s=>s==='dr'?'차변':'대변';
+
+function propagate(sid, ss){
+  const steps=[], seen=new Set();
+  let front=[{id:sid,s:ss,w:1,weak:false}];
+  steps.push({id:sid,s:ss,w:1,weak:false,first:true,d:0});
+  seen.add(sid+'|'+ss);
+  for(let d=0; d<6 && front.length; d++){
+    const next=[];
+    front.sort((a,b)=>b.w-a.w);   /* 같은 깊이에선 센 경로가 먼저 자리를 잡는다 */
+    /* v4 규칙: 맞은 면에 물린 상대가 먼저 움직이고(항등식이면 같은 거래의 반대편),
+       그다음 균형 제약으로 반대 면이 움직여 그 면의 상대로 건너간다.
+       v3까지는 반대 면을 먼저 탔기 때문에, 레버리지 펀드 대변(repo 차입)을 맞히면
+       딜러에게 항등식(고객 repo 대출)보다 행동 경로(국채 매도)가 먼저 잡혔다. */
+    front.forEach(f=>{
+      const adj=other(f.s), ka=f.id+'|'+adj;
+      if(!seen.has(ka)){ seen.add(ka); steps.push({id:f.id,s:adj,w:f.w,weak:f.weak,internal:true,d}); }
+      [f.s, adj].forEach(fs=>{
+        let damp=1;
+        if(fedOn){
+          const b=BACKSTOP.find(x=>x.to===f.id && x.s===fs);
+          if(b){ damp=.28; if(!seen.has('bs|'+b.t)){ seen.add('bs|'+b.t); steps.push({id:f.id,s:fs,damped:true,tool:b.t,d}); } }
+        }
+        LINKS.forEach(L=>{
+          let to=null,ts=null;
+          if(L.a===f.id&&L.as===fs){to=L.b;ts=L.bs;}
+          else if(L.b===f.id&&L.bs===fs&&!L.oneway){to=L.a;ts=L.as;}   /* v12: 조건 노드(CBDC)는 충격을 받지 않는다 */
+          if(!to) return;
+          const k=to+'|'+ts; if(seen.has(k)) return;
+          const w=f.w*(L.k==='id'?.88:.55)*damp;
+          if(w<.12) return;
+          seen.add(k);
+          steps.push({id:to,s:ts,w,weak:f.weak||L.k==='bh',link:L,from:f.id,fs,d:d+1});
+          next.push({id:to,s:ts,w,weak:f.weak||L.k==='bh'});
+        });
+      });
+    });
+    front=next;
+  }
+  return steps;
+}
+
+let raf=null, looping=false;
+let timers=[];
+const litSet=new Set();
+function later(ms,f){ timers.push(setTimeout(f,ms)); }
+function fire(S){
+  if(sel.startsWith('x:')||sel.startsWith('m:')) return;
+  if(!S || !S.node){ S=null; if(scen!=='custom'){ scen='custom'; scenCard(); } }
+  const steps=propagate(sel, side);
+  timers.forEach(clearTimeout); timers=[];
+  Object.keys(heat).forEach(k=>heat[k]=0);
+  pulses.length=0;
+  FX.flash=[]; FX.rings=[]; FX.shakes=[]; FX.lit=[]; FX.scr=null; FX.xflash=-1e9;
+  exitHit=new Set(); exitWeak=new Set(); exitHitFrom=new Set(); exitFirm=new Set();
+
+  /* 시간표 — 깊이 d의 펄스는 depart(d)에 떠나 arrive(d)에 닿는다 */
+  const IMPACT=REDUCED?0:1700, TRAVEL=REDUCED?0:1150, BEAT=REDUCED?0:650;   /* v7: 전이 속도를 늦춤 (홉 간격 약 1.8초) */
+  const depart=d=>IMPACT+(d-1)*(TRAVEL+BEAT);
+  const arrive=d=>d===0?0:depart(d)+TRAVEL;
+  steps.forEach(s=>{ s.at=arrive(s.d||0)+(s.damped?120:0); });
+  const T0=now();
+  const RED='255,92,92', FEDC='167,139,250', GOLDC='240,206,128';
+
+  const seq=steps.filter(s=>s.first||s.link);
+  const k0=sel+'|'+side, c0=slabCenter(sel,side);
+  heat[k0]=1;
+  camTo([sel],.86); later(IMPACT*.8,()=>camHome());
+  { const byD={}; seq.forEach(s=>{ if(!s.first) (byD[s.d]=byD[s.d]||[]).push(s.id); });
+    Object.entries(byD).forEach(([d,ids])=>later(depart(+d)+TRAVEL*.35,()=>camTo(ids,.94))); }
+  if(!REDUCED){
+    FX.flash.push({key:k0,t0:T0,n:4,p:280,amp:1.6});
+    [0,280,560].forEach((o,i)=>FX.rings.push({c:c0,t0:T0+o,dur:900,R:34-i*6,amp:1-i*.22,col:RED,lw:3.2-i*.6}));
+    FX.shakes.push({t0:T0,dur:750,amp:7});
+    FX.scr={t0:T0,c:c0};
+  }
+  seq.forEach(s=>{
+    if(s.first) return;
+    const dep=depart(s.d), arr=arrive(s.d), key=s.id+'|'+s.s;
+    const p0=slabCenter(s.from,s.fs), p1=slabCenter(s.id,s.s);
+    pulses.push({p0,p1,m:{x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2,z:(p0.z+p1.z)/2+16},t0:T0+dep,dur:Math.max(1,TRAVEL),w:s.w});
+    later(arr,()=>{ heat[key]=Math.max(heat[key],Math.min(1,s.w)); });
+    if(!REDUCED){
+      FX.lit.push({i:LINKS.indexOf(s.link),t0:T0+dep,dur:TRAVEL,a:.55+.45*s.w});
+      FX.flash.push({key:s.from+'|'+s.fs,t0:T0+dep,n:1,p:240,amp:.55*s.w});            /* 떠나는 면이 한 번 튄다 */
+      FX.flash.push({key,t0:T0+arr,n:2,p:320,amp:.55+.75*s.w});                       /* 닿은 면이 두 번 번쩍 */
+      FX.rings.push({c:p1,t0:T0+arr,dur:1000,R:14+12*s.w,amp:.45+.5*s.w,col:RED});
+      FX.shakes.push({t0:T0+arr,dur:320,amp:2.6*s.w});
+    }
+  });
+  if(!REDUCED) steps.filter(s=>s.damped).forEach(s=>{
+    FX.rings.push({c:slabCenter(s.id,s.s),t0:T0+s.at,dur:1000,R:24,amp:.9,col:FEDC,lw:3});
+  });
+
+  /* 경로가 끝난 뒤 닿은 출구를 켠다 — 세기 없이 "닿음"만 */
+  const reached=new Set(seq.map(s=>s.id));
+  const firm=new Set(seq.filter(s=>!s.weak).map(s=>s.id));
+  const maxD=Math.max(0,...seq.map(s=>s.d||0));
+  const exitAt=arrive(maxD)+(REDUCED?0:450);
+  later(exitAt,()=>{
+    camHome();
+    exitHitFrom=reached; exitFirm=firm;
+    Object.entries(EXITS).forEach(([xid,X])=>{
+      if(X.from.some(id=>firm.has(id))) exitHit.add(xid);
+      else if(X.from.some(id=>reached.has(id))) exitWeak.add(xid);
+    });
+    if(!REDUCED){
+      FX.xflash=now();
+      Object.entries(EXITS).forEach(([xid,X])=>{
+        const hit=exitHit.has(xid), wk=exitWeak.has(xid); if(!hit&&!wk) return;
+        const c={x:X.pos[0],y:XY,z:X.pos[2]};
+        FX.rings.push({c,t0:FX.xflash,dur:950,R:hit?26:18,amp:hit?.85:.4,col:GOLDC,lw:hit?2.8:1.8});
+        if(hit) FX.rings.push({c,t0:FX.xflash+260,dur:950,R:20,amp:.55,col:GOLDC,lw:2});
+      });
+    }
+    startLoop();
+    if(sel.startsWith('x:')) refresh();
+  });
+  FX.endAt=T0+exitAt+1400;
+  FX.holdUntil=REDUCED?T0:FX.endAt+1500;   /* 경로가 다 그려진 뒤 잠시 남겼다가 식힌다 */
+
+  litSet.clear();
+  /* v8 — 오른쪽 파급 설명: 전파와 같은 시간표로 한 단계씩 */
+  story=buildStory(steps,S).map((e,i)=>({...e,o:i})).sort((a,b)=>a.at-b.at||a.o-b.o);
+  const xF=Object.values(EXITS).filter(X=>X.from.some(id=>firm.has(id))).map(X=>X.short);
+  const xW=Object.values(EXITS).filter(X=>!X.from.some(id=>firm.has(id)) && X.from.some(id=>reached.has(id))).map(X=>X.short);
+  if(xF.length||xW.length) story.push({at:exitAt, cls:'xl', html:`<span class="hd">지도 밖 출구<span class="tg x">[가설]</span></span>${xF.length?`항등식만으로 닿음: <b>${xF.join(' · ')}</b>. `:''}${xW.length?`행동 경로를 거쳐야 닿음: ${xW.join(' · ')}. `:''}닿는다는 것만 표시한다 — 얼마나 움직이는지는 2층에서 추정한다.`});
+  { const nId=steps.filter(s=>s.link&&s.link.k==='id'&&!s.weak).length, nBh=steps.filter(s=>s.link&&(s.link.k==='bh'||s.weak)).length;
+    const nD=steps.filter(s=>s.damped).length;
+    story.push({at:exitAt+500, cls:'sum', html:`<span class="hd">정리<span class="tg x">이 경로가 말하는 것</span></span>
+      <span class="rw"><i>보증</i>회계 항등식으로만 이어진 단계 <b>${nId}</b>개 — 거래가 성립한 이상 반드시 이렇게 맞물린다.</span>
+      <span class="rw"><i>조건부</i>행동이 끼어 있는 단계 <b>${nBh}</b>개 — 실제로 그렇게 움직였는지는 사례별로 따로 관측해야 한다.</span>
+      ${nD?`<span class="rw"><i>백스톱</i>연준이 받은 자리 <b>${nD}</b>곳 — 충격을 지운 게 아니라 연준 대차대조표로 옮겼다.</span>`:''}
+      <span class="rw ev"><i>원고</i>${S&&S.c?S.c:'이 진입점은 시나리오가 아니라 직접 고른 것 — 원고 판정과 짝지어 있지 않다.'}</span>`}); }
+  storyTitle = S ? `${S.k} · ${S.t}` : `${NODES[sel].name} ${FACE[side]} 충격`;
+  storyShown=REDUCED?story.length:0; storyNew=-1; infoMode='story';
+  story.forEach((e,i)=>later(e.at,()=>{ storyShown=Math.max(storyShown,i+1); storyNew=i; if(infoMode==='story'&&!sel.startsWith('x:')) refresh(); }));
+  renderTrace(steps, reached, firm);
+  refresh();
+  /* 전파 경로 목록도 도착 순서대로 켠다 */
+  steps.forEach((s,i)=>{ if(s.first||s.link||s.damped) later(s.at,()=>lightTrace(i)); });
+  startLoop();
+}
+elFire.addEventListener('click', ()=>fire());
+
+function startLoop(){
+  if(looping) return;
+  looping=true;
+  const step=()=>{
+    const t=now();
+    let live = t<FX.endAt;
+    if(t>FX.holdUntil){
+      Object.keys(heat).forEach(k=>{ if(heat[k]>.004){ heat[k]*= REDUCED?.90:.975; live=true; } else heat[k]=0; });
+    } else live=true;
+    for(let i=pulses.length-1;i>=0;i--){ if(t-pulses[i].t0>pulses[i].dur) pulses.splice(i,1); else live=true; }
+    FX.rings=FX.rings.filter(r=>t-r.t0<r.dur); if(FX.rings.length) live=true;
+    draw();
+    if(live) raf=requestAnimationFrame(step); else { looping=false; draw(); }
+  };
+  raf=requestAnimationFrame(step);
+}
+
+function renderTrace(steps, reached, firm){
+  const box=document.getElementById('trace'), list=document.getElementById('traceList'), end=document.getElementById('traceEnd');
+  const show=steps.filter(s=>s.first||s.link||s.damped);
+  list.innerHTML=show.map(s=>{
+    const i=steps.indexOf(s), pend=REDUCED?'':' pend';
+    if(s.damped) return `<li data-i="${i}" class="${pend}" style="color:var(--fed)"><span class="n">${s.tool}</span></li>`;
+    return `<li data-i="${i}" class="${s.weak?'weak':''}${pend}"><span class="n">${NODES[s.id].name}</span><span class="sd ${s.s}">${KO(s.s)}</span></li>`;
+  }).join('');
+  const damped=steps.filter(s=>s.damped);
+  const weak=show.filter(s=>s.weak).length;
+  const tsy=steps.find(s=>s.id==='treasury'&&s.link);
+  let t = weak
+    ? `실선 구간은 회계가 보증한다. <b>흐린 구간(${weak}개)은 행동 경로</b>라서 실제로 그렇게 움직였는지는 따로 관측해야 한다.`
+    : '이 경로는 전부 항등식이다 — 거래가 성립한 이상 반드시 이렇게 맞물린다.';
+  if(damped.length) t = `<b style="color:var(--fed)">${[...new Set(damped.map(d=>d.tool))].join(' · ')}</b>가 중간에서 받아 뒤쪽 세기를 약 1/4로 줄였다. 끊은 게 아니라 <b>연준 대차대조표로 옮긴 것</b>이다. `+t;
+  if(tsy) t += ` 경로가 <b>재무부 대변</b>까지 닿았다 — 이 사슬의 어느 곳이 조여도 국채를 받아낼 여력이 줄어든다.`;
+  const xF=Object.values(EXITS).filter(X=>X.from.some(id=>firm.has(id))).map(X=>X.short);
+  const xW=Object.values(EXITS).filter(X=>!X.from.some(id=>firm.has(id)) && X.from.some(id=>reached.has(id))).map(X=>X.short);
+  if(xF.length||xW.length) t += ` <span class="xout">지도 밖 출구 — ${xF.length?`항등식만으로 닿음: <b>${xF.join(' · ')}</b>`:''}${xF.length&&xW.length?' / ':''}${xW.length?`행동 경로를 거쳐야 닿음: ${xW.join(' · ')}`:''}. 닿는다는 것만 표시한다 — 얼마나 움직이는지는 2층에서 추정한다.</span>`;
+  end.innerHTML=t;
+  box.classList.add('show');
+  /* 모바일: 시트 머리 아래에 경로만 짧게 */
+  mTraceHTML = '<ol>'+list.innerHTML+'</ol><div class="mend">'+t+'</div>';
+  const mt=document.getElementById('mtrace'); if(mt) mt.innerHTML=mTraceHTML;
+  resize();
+}
+function lightTrace(i){
+  litSet.add(i);
+  document.querySelectorAll(`#traceList li[data-i="${i}"], #mtrace li[data-i="${i}"]`).forEach(li=>{
+    li.classList.remove('pend'); li.classList.add('lit'); });
+  /* 모바일 시트가 다시 그려져도 켜진 상태가 남도록 문자열도 고친다 */
+  mTraceHTML = mTraceHTML.replace(new RegExp(`(data-i="${i}" class="[^"]*?) pend`), '$1 lit');
+}
+
+/* ══════════ WebGL — 실제 3D (v5) ══════════
+   투영식은 위의 proj()를 셰이더에 그대로 옮겼다. 그래서 라벨·클릭·프레임은 2D 캔버스가
+   계속 맡고, 면·선·빛·가림·그림자는 GPU가 깊이 버퍼로 처리한다.
+   외부 라이브러리 없음. WebGL을 못 쓰면 기존 2D 그리기로 돌아간다. */
+const glc=document.getElementById('gl');
+let gl=null, GLON=false, glR=null;
+const GLK=new Set(['grid','link','bs','face','xplane','xline','xplate','pulse','mline','mplate']);
+const BG=[11/255,15/255,23/255];
+const hx=c=>[((c>>16)&255)/255,((c>>8)&255)/255,(c&255)/255];
+
+function initGL(){
+  const HEAD=`
+  uniform vec4 uRot; uniform vec3 uTgt; uniform float uDist; uniform float uFocal; uniform vec4 uScr;
+  vec3 rotv(vec3 p){ float x1=p.x*uRot.x-p.z*uRot.y; float z1=p.x*uRot.y+p.z*uRot.x;
+    return vec3(x1, p.y*uRot.z-z1*uRot.w, p.y*uRot.w+z1*uRot.z); }
+  vec4 projv(vec3 r){ float zc=r.z+uDist; float sx=2.0/uScr.z; float sy=2.0/uScr.w;
+    return vec4((uScr.x*sx-1.0)*zc+r.x*uFocal*sx, (1.0-uScr.y*sy)*zc+r.y*uFocal*sy,
+                1.003339*zc-10.01669, zc); }`;
+  const VS=`
+  attribute vec3 aPos; attribute vec3 aNrm; attribute vec2 aAux;
+  uniform vec3 uC; uniform vec3 uS;
+  varying vec3 vN; varying vec3 vL; varying vec2 vAux; varying vec3 vV;
+  ${HEAD}
+  void main(){
+    vec3 w=uC+aPos*uS; vec3 r=rotv(w-uTgt);
+    vN=rotv(aNrm); vL=aPos; vAux=aAux; vV=vec3(r.x,r.y,r.z+uDist);
+    gl_Position=projv(r);
+  }`;
+  const FS=`
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
+  precision mediump float;
+  #endif
+  uniform vec4 uCol; uniform int uMode; uniform vec3 uDash; uniform float uEmis; uniform vec3 uEmC;
+  uniform vec3 uSf; uniform vec3 uBg; uniform float uFogZ; uniform vec3 uLight;
+  varying vec3 vN; varying vec3 vL; varying vec2 vAux; varying vec3 vV;
+  void main(){
+    vec3 n=normalize(vN); vec3 col=uCol.rgb; float a=uCol.a;
+    if(uMode==0){
+      float d=max(0.0,dot(n,uLight)); float k=.40+.60*d;
+      vec3 V=normalize(-vV); vec3 Lv=normalize(vec3(uLight.x,uLight.y,-uLight.z));
+      float sp=pow(max(0.0,dot(reflect(-Lv,n),V)),28.0)*.20;
+      vec3 q=(1.0-abs(vL))*uSf;
+      float m1=min(q.x,min(q.y,q.z)), m3=max(q.x,max(q.y,q.z)), m2=q.x+q.y+q.z-m1-m3;
+      float edge=1.0-smoothstep(.18,.62,m2);
+      col=col*k+sp+edge*.13;
+      col=mix(col,uEmC,uEmis*.18)+uEmC*uEmis*.16;
+    } else if(uMode==1){
+      if(uDash.z>1.5){ float df=fract(vAux.x/uDash.x); if(df>.52 && (df<.66 || df>.8)) discard; }
+      else if(uDash.z>.5 && fract(vAux.x/uDash.x)>uDash.y) discard;
+      col=col*(.72+.38*max(0.0,dot(n,uLight)));
+    } else if(uMode==3){
+      vec2 p=vL.xz*uSf.xz; float dE=min(uSf.x-abs(p.x),uSf.z-abs(p.y));
+      if(dE<.55 && mod(p.x+p.y+200.0,6.0)<2.2){ a=.24; } else { a=.04; }
+    } else if(uMode==4){
+      float r=length(vL.xz); a=uCol.a*(1.0-smoothstep(.15,1.0,r));
+    }
+    float f=smoothstep(uFogZ-40.0,uFogZ+180.0,vV.z)*.5;
+    gl_FragColor=vec4(mix(col,uBg,f),a);
+  }`;
+  const BVS=`
+  attribute vec2 aCorner; uniform vec3 uCenter; uniform float uSize; uniform float uPush;
+  varying vec2 vC;
+  ${HEAD}
+  void main(){ vec3 r=rotv(uCenter-uTgt); r.xy+=aCorner*uSize; r.z+=uPush; vC=aCorner; gl_Position=projv(r); }`;
+  const BFS=`
+  precision mediump float; uniform vec4 uCol; uniform float uCore; varying vec2 vC;
+  void main(){ float d=length(vC); float g=exp(-d*d*4.0)*(1.0-smoothstep(.8,1.0,d));
+    float c=uCore*(1.0-smoothstep(.0,.26,d));
+    gl_FragColor=vec4(uCol.rgb*g*uCol.a + vec3(1.0,.92,.88)*c*uCol.a, 1.0); }`;
+
+  function sh(t,src){ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  function prog(v,f){ const p=gl.createProgram(); gl.attachShader(p,sh(gl.VERTEX_SHADER,v)); gl.attachShader(p,sh(gl.FRAGMENT_SHADER,f));
+    gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u={}; const nU=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+    for(let i=0;i<nU;i++){ const nm=gl.getActiveUniform(p,i).name; u[nm]=gl.getUniformLocation(p,nm); }
+    return {p,u,a:{pos:gl.getAttribLocation(p,'aPos'),nrm:gl.getAttribLocation(p,'aNrm'),aux:gl.getAttribLocation(p,'aAux'),cor:gl.getAttribLocation(p,'aCorner')}}; }
+  const P=prog(VS,FS), B=prog(BVS,BFS);
+
+  /* 정점: pos3 · nrm3 · aux2 */
+  const V=[]; const push=(p,n,a)=>V.push(p[0],p[1],p[2],n[0],n[1],n[2],a?a[0]:0,a?a[1]:0);
+  const R={};
+  const mark=(k,f)=>{ const s=V.length/8; f(); R[k]={first:s,count:V.length/8-s}; };
+
+  mark('cube',()=>FC.forEach(f=>{ const n=[f.n.x,f.n.y,f.n.z], q=f.i.map(k=>VT[k]);
+    [0,1,2,0,2,3].forEach(j=>push(q[j],n)); }));
+  mark('quad',()=>[[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]].forEach(c=>push([c[0],0,c[1]],[0,1,0])));
+  mark('drops',()=>Object.values(NODES).forEach(n=>{ push([n.pos[0],n.pos[1]-SH/2-.5,n.pos[2]],[0,1,0]); push([n.pos[0],-75.6,n.pos[2]],[0,1,0]); }));
+  mark('grid',()=>{ const GY=-76, GS=112, GN=8;
+    for(let i=0;i<=GN;i++){ const t=-GS+2*GS*i/GN;
+      push([t,GY,-GS],[0,1,0]); push([t,GY,GS],[0,1,0]); push([-GS,GY,t],[0,1,0]); push([GS,GY,t],[0,1,0]); } });
+
+  function bez(p0,m,p1,t){ const u=1-t; return [u*u*p0.x+2*u*t*m.x+t*t*p1.x, u*u*p0.y+2*u*t*m.y+t*t*p1.y, u*u*p0.z+2*u*t*m.z+t*t*p1.z]; }
+  function tube(p0,m,p1,N,rad){
+    const pts=[]; for(let i=0;i<=N;i++) pts.push(bez(p0,m,p1,i/N));
+    const SIDES=6, ring=[]; let arc=0;
+    for(let i=0;i<=N;i++){
+      const a=pts[Math.max(0,i-1)], b=pts[Math.min(N,i+1)];
+      let T=[b[0]-a[0],b[1]-a[1],b[2]-a[2]]; let l=Math.hypot(...T); T=T.map(v=>v/l);
+      let up=Math.abs(T[1])>.9?[1,0,0]:[0,1,0];
+      let X=[T[1]*up[2]-T[2]*up[1],T[2]*up[0]-T[0]*up[2],T[0]*up[1]-T[1]*up[0]]; l=Math.hypot(...X); X=X.map(v=>v/l);
+      const Y=[T[1]*X[2]-T[2]*X[1],T[2]*X[0]-T[0]*X[2],T[0]*X[1]-T[1]*X[0]];
+      if(i) arc+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1],pts[i][2]-pts[i-1][2]);
+      const r=[]; for(let s=0;s<SIDES;s++){ const th=s/SIDES*Math.PI*2, c=Math.cos(th), sn=Math.sin(th);
+        const n=[X[0]*c+Y[0]*sn,X[1]*c+Y[1]*sn,X[2]*c+Y[2]*sn];
+        r.push({p:[pts[i][0]+n[0]*rad,pts[i][1]+n[1]*rad,pts[i][2]+n[2]*rad],n,arc}); }
+      ring.push(r);
+    }
+    for(let i=0;i<N;i++) for(let s=0;s<SIDES;s++){
+      const s2=(s+1)%SIDES, A=ring[i][s], Bb=ring[i][s2], C=ring[i+1][s2], D=ring[i+1][s];
+      [A,Bb,C,A,C,D].forEach(v=>push(v.p,v.n,[v.arc,0]));
+    }
+  }
+  LINKS.forEach((L,i)=>mark('L'+i,()=>{ const p0=slabCenter(L.a,L.as), p1=slabCenter(L.b,L.bs);
+    tube(p0,{x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2,z:(p0.z+p1.z)/2+16},p1,28,L.k==='id'?.5:.42); }));
+  BACKSTOP.forEach((Bk,i)=>mark('B'+i,()=>{ const p0=slabCenter('fed','dr'), p1=slabCenter(Bk.to,Bk.s);
+    tube(p0,{x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2,z:(p0.z+p1.z)/2-20},p1,24,.48); }));
+  Object.entries(EXITS).forEach(([xid,X])=>X.from.forEach(nid=>mark('X'+xid+'|'+nid,()=>{
+    const n=NODES[nid], p0={x:n.pos[0],y:n.pos[1]-SH/2,z:n.pos[2]}, p1={x:X.pos[0],y:XY+2,z:X.pos[2]};
+    tube(p0,{x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2-10,z:(p0.z+p1.z)/2},p1,20,.34); })));
+
+  Object.entries(MACRO).forEach(([mid,M])=>mark('M'+mid,()=>{
+    const p0={x:M.pos[0]*.55,y:XY-1.5,z:8}, p1={x:M.pos[0],y:MY+1.5,z:M.pos[2]};
+    tube(p0,{x:(p0.x+p1.x)/2,y:(p0.y+p1.y)/2,z:(p0.z+p1.z)/2+6},p1,16,.36); }));
+  const vb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vb); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(V),gl.STATIC_DRAW);
+  const bb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,bb);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,1,1,-1,-1,1,1,-1,1]),gl.STATIC_DRAW);
+  return {P,B,R,vb,bb};
+}
+
+function glRender(T){
+  T=T||now();
+  const {P,B,R,vb,bb}=glR;
+  gl.viewport(0,0,glc.width,glc.height);
+  gl.clearColor(BG[0],BG[1],BG[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  const cam=[Math.cos(az),Math.sin(az),Math.cos(el),Math.sin(el)];
+  const common=pr=>{ const u=pr.u; gl.useProgram(pr.p);
+    gl.uniform4fv(u.uRot,cam); gl.uniform3f(u.uTgt,tgt.x,tgt.y,tgt.z);
+    gl.uniform1f(u.uDist,dist); gl.uniform1f(u.uFocal,focal); gl.uniform4f(u.uScr,CX,CY,W,H); };
+
+  /* ── 메시 ── */
+  common(P); const u=P.u;
+  gl.bindBuffer(gl.ARRAY_BUFFER,vb);
+  gl.enableVertexAttribArray(P.a.pos); gl.vertexAttribPointer(P.a.pos,3,gl.FLOAT,false,32,0);
+  if(P.a.nrm>=0){ gl.enableVertexAttribArray(P.a.nrm); gl.vertexAttribPointer(P.a.nrm,3,gl.FLOAT,false,32,12); }
+  if(P.a.aux>=0){ gl.enableVertexAttribArray(P.a.aux); gl.vertexAttribPointer(P.a.aux,2,gl.FLOAT,false,32,24); }
+  gl.uniform3fv(u.uBg,BG); gl.uniform1f(u.uFogZ,dist); gl.uniform3f(u.uLight,LIGHT.x,LIGHT.y,LIGHT.z);
+  const draw1=(k,mode,col,a,C,S,o)=>{ o=o||{};
+    gl.uniform1i(u.uMode,mode); gl.uniform4f(u.uCol,col[0],col[1],col[2],a);
+    gl.uniform3fv(u.uC,C||[0,0,0]); gl.uniform3fv(u.uS,S||[1,1,1]); gl.uniform3fv(u.uSf,S||[1,1,1]);
+    gl.uniform3fv(u.uDash,o.dash||[1,1,0]); gl.uniform1f(u.uEmis,o.em||0); gl.uniform3fv(u.uEmC,o.emc||[0,0,0]);
+    gl.drawArrays(o.lines?gl.LINES:gl.TRIANGLES,R[k].first,R[k].count); };
+
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+  draw1('grid',2,[26/255,34/255,49/255],.75,null,null,{lines:true});
+  /* 바닥 그림자 — 높이를 읽게 해 준다 */
+  draw1('drops',2,[120/255,140/255,175/255],.16,null,null,{lines:true});
+  /* 높이가 높을수록 그림자는 넓고 옅다 — 떠 있는 거리가 읽힌다 */
+  Object.values(NODES).forEach(n=>{ const hgt=(n.pos[1]+76)/134;
+    draw1('quad',4,[0,0,0],.46-.22*hgt,[n.pos[0],-75.8,n.pos[2]],[(SW+GAP+3)*(1+.9*hgt),1,(SD+5)*(1+.9*hgt)]);
+    draw1('quad',4,[0,0,0],.30,[n.pos[0],-75.75,n.pos[2]],[(SW+GAP)*.55,1,SD*.6]); });
+
+  /* 불투명: 슬랩 · 출구 판 */
+  gl.disable(gl.BLEND); gl.depthMask(true);
+  const HOT=hx(HOT_C);
+  Object.keys(NODES).forEach(id=>['dr','cr'].forEach(s=>{
+    const key=id+'|'+s, c=slabCenter(id,s), h=visHeat(key,T), pk=punch(key,T);
+    const col=hx(h>.02?mix(s==='dr'?DR_C:CR_C,HOT_C,Math.min(1,h)):(s==='dr'?DR_C:CR_C));
+    draw1('cube',0,col,1,[c.x,c.y,c.z],[SW/2*pk,SH/2*pk,SD/2*pk],{em:Math.min(2.4,h*1.5),emc:HOT});
+  }));
+  const GOLD=hx(0xD4B36A), GOLDH=hx(0xF0CE80);
+  Object.entries(EXITS).forEach(([xid,X])=>{
+    const hot=exitHit.has(xid), weak=exitWeak.has(xid), on=sel==='x:'+xid;
+    const k=hot?1:(on?.85:(weak?.7:.5));
+    const xs=hot?strobe(T-FX.xflash,3,260):(weak?.5*strobe(T-FX.xflash,2,260):0);
+    draw1('cube',0,GOLD.map(v=>v*k+BG[0]*(1-k)),1,[X.pos[0],XY,X.pos[2]],[15*(1+.08*xs),1.3,7*(1+.08*xs)],{em:(hot?.55:0)+1.6*xs,emc:GOLDH});
+  });
+  const CYN=hx(0x5FA8BC), CYNH=hx(0xBFE8F3);
+  Object.entries(MACRO).forEach(([mid,M])=>{ const on=sel==='m:'+mid, k=on?1:.6;
+    draw1('cube',0,CYN.map(v=>v*k+BG[0]*(1-k)),1,[M.pos[0],MY,M.pos[2]],[14,1.3,7],{em:on?.6:0,emc:CYNH}); });
+
+  /* 반투명: 아래층 판 · 선 */
+  gl.enable(gl.BLEND); gl.depthMask(false);
+  draw1('quad',3,hx(0xD4B36A),.04,[0,XY-1.4,8],[96,1,26]);
+  LINKS.forEach((L,i)=>{ const idl=L.k==='id';
+    draw1('L'+i,1,idl?[108/255,143/255,184/255]:[96/255,110/255,134/255],idl?.78:.62,null,null,{dash:idl?[1,1,0]:[6.5,.5,1]}); });
+  if(fedOn) BACKSTOP.forEach((Bk,i)=>draw1('B'+i,1,[167/255,139/255,250/255],.85,null,null,{dash:[5,.55,1]}));
+  if(FX.lit.length){ gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    LINKS.forEach((L,i)=>{ const a=litOf(i,T); if(a>.02) draw1('L'+i,1,[1,.42,.36],Math.min(1,a),null,null,{dash:[1,1,0]}); });
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); }
+  Object.entries(EXITS).forEach(([xid,X])=>{
+    const hit=exitHit.has(xid), on=sel==='x:'+xid;
+    X.from.forEach(nid=>{
+      const hot=exitFirm.has(nid)&&hit, weak=!exitFirm.has(nid)&&exitHitFrom.has(nid)&&(hit||exitWeak.has(xid));
+      const col=hot?[240/255,206/255,128/255]:[212/255,179/255,106/255];
+      draw1('X'+xid+'|'+nid,1,col,hot?.95:(on?.75:(weak?.55:.32)),null,null,{dash:[3.2,.38,1]});
+    });
+  });
+  Object.entries(MACRO).forEach(([mid])=>{ const on=sel==='m:'+mid;
+    draw1('M'+mid,1,[124/255,196/255,216/255],on?.95:.55,null,null,{dash:[4.2,.5,2]}); });
+  [P.a.pos,P.a.nrm,P.a.aux].forEach(a=>{ if(a>=0) gl.disableVertexAttribArray(a); });
+
+  /* ── 빛: 뜨거운 면 · 출구 · 펄스 (가산 합성) ── */
+  common(B); const ub=B.u;
+  gl.bindBuffer(gl.ARRAY_BUFFER,bb); gl.enableVertexAttribArray(B.a.cor); gl.vertexAttribPointer(B.a.cor,2,gl.FLOAT,false,0,0);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+  const glow=(c,size,col,a,core,push)=>{ gl.uniform3f(ub.uCenter,c.x,c.y,c.z); gl.uniform1f(ub.uSize,size);
+    gl.uniform1f(ub.uPush,push||0); gl.uniform4f(ub.uCol,col[0],col[1],col[2],a); gl.uniform1f(ub.uCore,core||0);
+    gl.drawArrays(gl.TRIANGLES,0,6); };
+  /* 아래에서 받치는 은은한 빛 — 공중에 떠 있는 느낌 */
+  Object.values(NODES).forEach(n=>{ const c=hx(parseInt((n.tone==='#FFFFFF'?'#9AB0D4':n.tone).slice(1),16));
+    glow({x:n.pos[0],y:n.pos[1]-SH/2-3,z:n.pos[2]},SW*1.9,c,.16,0,1); });
+  Object.keys(NODES).forEach(id=>['dr','cr'].forEach(s=>{ const key=id+'|'+s, h=Math.min(1,heat[key]), f=flashOf(key,T);
+    if(h>.05) glow(slabCenter(id,s),SW*1.5,[1,.36,.36],.6*h,0,2);
+    if(f>.03) glow(slabCenter(id,s),SW*(1.6+1.6*Math.min(1.5,f)),[1,.45,.4],.75*Math.min(1.5,f),.35*Math.min(1,f),3); }));
+  Object.entries(EXITS).forEach(([xid,X])=>{ const c={x:X.pos[0],y:XY,z:X.pos[2]};
+    if(exitHit.has(xid)) glow(c,20+16*strobe(T-FX.xflash,3,260),[.94,.81,.5],.32+.6*strobe(T-FX.xflash,3,260),0,3);
+    else if(exitWeak.has(xid)){ const xs=strobe(T-FX.xflash,2,260); if(xs>.02) glow(c,18,[.94,.81,.5],.3*xs,0,3); } });
+  pulses.forEach(p=>{ const t=(T-p.t0)/p.dur; if(t<0||t>1) return;
+    const amp=Math.max(.45,p.w);
+    for(let k=5;k>=1;k--){ const tk=t-k*.045; if(tk<0) continue;                     /* 꼬리 */
+      glow(bezP(p,tk),5.5*(1-k*.12),[1,.36,.36],amp*.42*(1-k/6),0,-1); }
+    glow(bezP(p,t),7.5,[1,.4,.36],amp*(.75+.25*Math.sin(t*Math.PI)),1.4,-1); });
+  gl.disableVertexAttribArray(B.a.cor);
+  gl.depthMask(true); gl.disable(gl.BLEND);
+}
+
+function glStart(){
+  try{
+    gl=glc.getContext('webgl',{antialias:true,alpha:false,xrCompatible:true})||glc.getContext('experimental-webgl',{antialias:true,alpha:false});
+    if(!gl) throw new Error('no webgl');
+    glR=initGL(); GLON=true;
+  }catch(e){ GLON=false; glc.style.display='none'; console.warn('WebGL 없음 → 2D 그리기', e); }
+}
+glc.addEventListener('webglcontextlost',e=>{ e.preventDefault(); GLON=false; glc.style.display='none'; draw(); });
+glc.addEventListener('webglcontextrestored',()=>{ glc.style.display=''; glStart(); resize(); });
+glStart();
+
+/* ══════════ v9 — WebXR 헤드셋 모드 ══════════
+   같은 데이터·전파·시간표를 쓰고, 그리는 층만 양안 행렬로 다시 그린다.
+   지도 좌표 → 방(물리) 좌표는 행렬 XR.Mw 하나. 이동·회전·크기 바꾸기는 이 행렬만 고친다.
+   z는 뒤집는다(화면판의 투영이 왼손 좌표라서) — 그래야 화면에서 본 좌우·앞뒤가 그대로 보인다.
+   조작: 오른손 레이로 가리키고 트리거 = 고르기 / 왼손 스틱 = 날아 이동 / 오른손 스틱 좌우 = 30° 회전, 앞뒤 = 오르내리기
+         왼손 X·Y 버튼 또는 쥐기 = 판(패널)을 눈앞으로. 손 추적이면 집기(핀치)가 트리거다. */
+var XR={on:false, sess:null, ref:null, Mw:null, mode:'walk', tab:'scen', dirty:true, scroll:0,
+  prog:null, tex:{}, tab3:null, tabBtns:[], hov:new Map(), lastT:0, turnHeld:false, btnHeld:{}, needPlace:true, head:null, msg:''};
+const XRMODE={ walk:{s:.04, c:[0,-3,0], D:4.6, dy:0, sp:2.2}, table:{s:.0085, c:[0,-22,6], D:1.35, dy:-.5, sp:.6} };
+
+/* ── 4×4 행렬 (열 우선) ── */
+const M4={
+  I(){ const m=new Float32Array(16); m[0]=m[5]=m[10]=m[15]=1; return m; },
+  mul(a,b){ const o=new Float32Array(16);
+    for(let c=0;c<4;c++) for(let r=0;r<4;r++){ let s=0; for(let k=0;k<4;k++) s+=a[k*4+r]*b[c*4+k]; o[c*4+r]=s; } return o; },
+  T(x,y,z){ const m=M4.I(); m[12]=x; m[13]=y; m[14]=z; return m; },
+  S(x,y,z){ const m=M4.I(); m[0]=x; m[5]=y; m[10]=z; return m; },
+  Ry(a){ const m=M4.I(), c=Math.cos(a), s=Math.sin(a); m[0]=c; m[2]=-s; m[8]=s; m[10]=c; return m; },
+  inv(m){ const a=m, o=new Float32Array(16);
+    const b00=a[0]*a[5]-a[1]*a[4], b01=a[0]*a[6]-a[2]*a[4], b02=a[0]*a[7]-a[3]*a[4], b03=a[1]*a[6]-a[2]*a[5],
+      b04=a[1]*a[7]-a[3]*a[5], b05=a[2]*a[7]-a[3]*a[6], b06=a[8]*a[13]-a[9]*a[12], b07=a[8]*a[14]-a[10]*a[12],
+      b08=a[8]*a[15]-a[11]*a[12], b09=a[9]*a[14]-a[10]*a[13], b10=a[9]*a[15]-a[11]*a[13], b11=a[10]*a[15]-a[11]*a[14];
+    let d=b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06; if(!d) return M4.I(); d=1/d;
+    o[0]=(a[5]*b11-a[6]*b10+a[7]*b09)*d; o[1]=(a[2]*b10-a[1]*b11-a[3]*b09)*d; o[2]=(a[13]*b05-a[14]*b04+a[15]*b03)*d; o[3]=(a[10]*b04-a[9]*b05-a[11]*b03)*d;
+    o[4]=(a[6]*b08-a[4]*b11-a[7]*b07)*d; o[5]=(a[0]*b11-a[2]*b08+a[3]*b07)*d; o[6]=(a[14]*b02-a[12]*b05-a[15]*b01)*d; o[7]=(a[8]*b05-a[10]*b02+a[11]*b01)*d;
+    o[8]=(a[4]*b10-a[5]*b08+a[7]*b06)*d; o[9]=(a[1]*b08-a[0]*b10-a[3]*b06)*d; o[10]=(a[12]*b04-a[13]*b02+a[15]*b00)*d; o[11]=(a[9]*b02-a[8]*b04-a[11]*b00)*d;
+    o[12]=(a[5]*b07-a[4]*b09-a[6]*b06)*d; o[13]=(a[0]*b09-a[1]*b07+a[2]*b06)*d; o[14]=(a[13]*b01-a[12]*b03-a[14]*b00)*d; o[15]=(a[8]*b03-a[9]*b01+a[10]*b00)*d;
+    return o; },
+  p(m,v){ return [m[0]*v[0]+m[4]*v[1]+m[8]*v[2]+m[12], m[1]*v[0]+m[5]*v[1]+m[9]*v[2]+m[13], m[2]*v[0]+m[6]*v[1]+m[10]*v[2]+m[14]]; },
+  d(m,v){ return [m[0]*v[0]+m[4]*v[1]+m[8]*v[2], m[1]*v[0]+m[5]*v[1]+m[9]*v[2], m[2]*v[0]+m[6]*v[1]+m[10]*v[2]]; }
+};
+const v3={ sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], k:(a,s)=>[a[0]*s,a[1]*s,a[2]*s],
+  dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], cross:(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
+  n:a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; } };
+const xs=()=>XRMODE[XR.mode].s;
+
+/* ── 셰이더 ── */
+function xrPrograms(){
+  const VS=`attribute vec3 aPos; attribute vec3 aNrm; attribute vec2 aAux;
+  uniform vec3 uC; uniform vec3 uS; uniform mat4 uMVP;
+  varying vec3 vN; varying vec3 vL; varying vec2 vAux; varying vec3 vW;
+  void main(){ vec3 w=uC+aPos*uS; vN=aNrm; vL=aPos; vAux=aAux; vW=w; gl_Position=uMVP*vec4(w,1.0); }`;
+  const FS=`precision mediump float;
+  uniform vec4 uCol; uniform int uMode; uniform vec3 uDash; uniform float uEmis; uniform vec3 uEmC;
+  uniform vec3 uSf; uniform vec3 uBg; uniform vec3 uEye; uniform float uFogD; uniform vec3 uLight;
+  varying vec3 vN; varying vec3 vL; varying vec2 vAux; varying vec3 vW;
+  void main(){
+    vec3 n=normalize(vN); vec3 col=uCol.rgb; float a=uCol.a;
+    if(uMode==0){
+      float d=max(0.0,dot(n,uLight)); float k=.40+.60*d;
+      vec3 V=normalize(uEye-vW);
+      float sp=pow(max(0.0,dot(reflect(-uLight,n),V)),28.0)*.20;
+      vec3 q=(1.0-abs(vL))*uSf;
+      float m1=min(q.x,min(q.y,q.z)), m3=max(q.x,max(q.y,q.z)), m2=q.x+q.y+q.z-m1-m3;
+      float edge=1.0-smoothstep(.18,.62,m2);
+      col=col*k+sp+edge*.13;
+      col=mix(col,uEmC,uEmis*.18)+uEmC*uEmis*.16;
+    } else if(uMode==1){
+      if(uDash.z>1.5){ float df=fract(vAux.x/uDash.x); if(df>.52 && (df<.66 || df>.8)) discard; }
+      else if(uDash.z>.5 && fract(vAux.x/uDash.x)>uDash.y) discard;
+      col=col*(.72+.38*max(0.0,dot(n,uLight)));
+    } else if(uMode==3){
+      vec2 p=vL.xz*uSf.xz; float dE=min(uSf.x-abs(p.x),uSf.z-abs(p.y));
+      if(dE<.55 && mod(p.x+p.y+200.0,6.0)<2.2){ a=.24; } else { a=.04; }
+    } else if(uMode==4){
+      float r=length(vL.xz); a=uCol.a*(1.0-smoothstep(.15,1.0,r));
+    }
+    float f=smoothstep(uFogD*.55,uFogD*1.7,length(vW-uEye))*.5;
+    gl_FragColor=vec4(mix(col,uBg,f),a);
+  }`;
+  const BVS=`attribute vec2 aCorner; uniform vec3 uCenter; uniform float uSize; uniform float uPush; uniform float uK;
+  uniform mat4 uMV; uniform mat4 uP; varying vec2 vC;
+  void main(){ vec4 c=uMV*vec4(uCenter,1.0); c.xy+=aCorner*uSize*uK; c.z-=uPush*uK; vC=aCorner; gl_Position=uP*c; }`;
+  const BFS=`precision mediump float; uniform vec4 uCol; uniform float uCore; uniform float uRing; varying vec2 vC;
+  void main(){ float d=length(vC);
+    if(uRing>0.0){ float a=1.0-smoothstep(0.0,uRing,abs(d-(1.0-uRing))); gl_FragColor=vec4(uCol.rgb*a*uCol.a,1.0); return; }
+    float g=exp(-d*d*4.0)*(1.0-smoothstep(.8,1.0,d));
+    float c=uCore*(1.0-smoothstep(.0,.26,d));
+    gl_FragColor=vec4(uCol.rgb*g*uCol.a + vec3(1.0,.92,.88)*c*uCol.a, 1.0); }`;
+  const SVS=`attribute vec2 aCorner; uniform vec3 uCenter; uniform vec3 uRight; uniform vec3 uUp; uniform mat4 uVP; varying vec2 vUV;
+  void main(){ vec3 p=uCenter+uRight*aCorner.x+uUp*aCorner.y; vUV=vec2(aCorner.x*.5+.5,.5-aCorner.y*.5); gl_Position=uVP*vec4(p,1.0); }`;
+  const SFS=`precision mediump float; uniform sampler2D uTex; uniform vec3 uTint; uniform vec3 uBgc; uniform float uMask; uniform float uA; varying vec2 vUV;
+  void main(){ vec4 t=texture2D(uTex,vUV); vec3 c=uMask>.5?mix(uBgc,uTint,t.r):t.rgb*uTint; float a=t.a*uA; if(a<.02) discard; gl_FragColor=vec4(c,a); }`;
+  function sh(t,src){ const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+  function prog(v,f){ const p=gl.createProgram(); gl.attachShader(p,sh(gl.VERTEX_SHADER,v)); gl.attachShader(p,sh(gl.FRAGMENT_SHADER,f));
+    gl.linkProgram(p); if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u={}; const nU=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+    for(let i=0;i<nU;i++){ const nm=gl.getActiveUniform(p,i).name; u[nm]=gl.getUniformLocation(p,nm); }
+    return {p,u,a:{pos:gl.getAttribLocation(p,'aPos'),nrm:gl.getAttribLocation(p,'aNrm'),aux:gl.getAttribLocation(p,'aAux'),cor:gl.getAttribLocation(p,'aCorner')}}; }
+  return {P:prog(VS,FS), B:prog(BVS,BFS), S:prog(SVS,SFS)};
+}
+
+/* ── 글자·기호 텍스처 ── */
+function texFrom(c){ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  return t; }
+function cnv(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+/* 글자는 흰색, 테두리 그림자는 검정 — 셰이더가 흰 쪽을 색으로, 검은 쪽을 바탕색으로 칠한다 */
+function maskText(lines){
+  const c=cnv(512,128), x=c.getContext('2d'), fam=FF();
+  x.textAlign='center'; x.textBaseline='middle';
+  lines.forEach(L=>{ x.font=L.f+' '+fam; x.shadowColor='rgba(0,0,0,1)'; x.shadowBlur=10; x.lineWidth=7; x.strokeStyle='rgba(0,0,0,.9)';
+    x.strokeText(L.t,256,L.y); x.fillStyle=L.c||'#fff'; x.fillText(L.t,256,L.y); });
+  return texFrom(c); }
+function buildTex(){
+  if(XR.tex.ready) return;
+  Object.entries(NODES).forEach(([id,n])=>{
+    XR.tex['n:'+id]=maskText([{t:n.name,f:'700 54px',y:46},{t:n.sub,f:'400 32px',y:98,c:'#8C8C8C'}]);
+    const c=cnv(128,128), x=c.getContext('2d');
+    x.beginPath(); x.arc(64,64,58,0,7); x.fillStyle='rgba(0,0,0,.96)'; x.fill();
+    x.lineWidth=7; x.strokeStyle='#fff'; if(n.ext) x.setLineDash([16,10]); x.stroke(); x.setLineDash([]);
+    x.lineWidth=6; x.lineJoin='round'; x.lineCap='round'; x.strokeStyle='#fff'; iconPath(x,n.icon,64,64,44); x.stroke();
+    XR.tex['m:'+id]=texFrom(c);
+  });
+  Object.entries(EXITS).forEach(([xid,X])=>{ XR.tex['x:'+xid]=maskText([{t:X.short,f:'700 52px',y:44},{t:X.name+' · '+X.freq,f:'400 32px',y:98,c:'#9A9A9A'}]); });
+  Object.entries(MACRO).forEach(([mid,M])=>{ XR.tex['mc:'+mid]=maskText([{t:M.short,f:'700 52px',y:44},{t:M.name+' · 월 · 2층',f:'400 32px',y:98,c:'#9A9A9A'}]); });
+  XR.tex.dr=maskText([{t:'차변',f:'600 44px',y:64}]); XR.tex.cr=maskText([{t:'대변',f:'600 44px',y:64}]);
+  XR.tab3={c:cnv(1024,1024)}; XR.tab3.t=texFrom(XR.tab3.c);
+  XR.tex.ready=true;
+}
+
+/* ── 판(패널)의 서식 있는 글 — 화면판의 HTML 조각을 그대로 받아 줄바꿈해 그린다 ── */
+const TGC={id:'#9CC0EA',bh:'#AEB7C7',fd:'#C4B5FD',x:'#E2C47E',sh:'#FFB4B4'};
+function richParas(html){
+  const doc=new DOMParser().parseFromString('<div>'+html+'</div>','text/html');
+  const paras=[[]]; const nl=()=>{ if(paras[paras.length-1].length) paras.push([]); };
+  (function walk(node,st){
+    node.childNodes.forEach(ch=>{
+      if(ch.nodeType===3){ const t=ch.nodeValue.replace(/\s+/g,' '); if(t.trim()||t===' ') paras[paras.length-1].push({t,...st}); return; }
+      if(ch.nodeType!==1) return;
+      const tag=ch.tagName.toLowerCase(), cl=ch.classList; let s={...st}; let block=false;
+      if(tag==='br'){ nl(); return; }
+      if(tag==='b') s.b=true;
+      if(tag==='i'){ s.c='#7D889E'; s.z=.82; }
+      if(cl.contains('hd')){ block=true; s.b=true; s.z=1.08; s.c='#F2F5FA'; }
+      if(cl.contains('rw')) block=true;
+      if(cl.contains('ev')) s.c='#A3ADC0';
+      if(cl.contains('sd')){ s.c=cl.contains('dr')?'#7DD3C0':'#E8795A'; s.z=.86; s.pad=true; }
+      if(cl.contains('tg')){ s.z=.78; s.pad=true; s.c=TGC[['id','bh','fd','x','sh'].find(k=>cl.contains(k))]||'#C9D1DE'; }
+      if(block) nl();
+      if(s.pad) paras[paras.length-1].push({t:' ',...st});
+      walk(ch,s);
+      if(tag==='i') paras[paras.length-1].push({t:'  ',...st});
+      if(s.pad) paras[paras.length-1].push({t:' ',...st});
+      if(block) nl();
+    });
+  })(doc.body.firstChild,{b:false,c:null,z:1});
+  return paras.filter(p=>p.some(r=>r.t.trim()));
+}
+function drawRich(x,paras,X,Y,Wd,base,col,draw){
+  const fam=FF(); let y=Y;
+  paras.forEach((p,pi)=>{
+    const lh=base*1.42; let cx=X, line=[];
+    const flush=()=>{ if(draw) line.forEach(l=>{ x.font=l.f; x.fillStyle=l.c; x.fillText(l.t,l.x,y); }); line=[]; y+=lh; cx=X; };
+    p.forEach(r=>{
+      const f=`${r.b?600:400} ${Math.round(base*(r.z||1))}px ${fam}`; x.font=f;
+      const c=r.c||col;
+      r.t.split(/(\s+)/).forEach(tok=>{ if(!tok) return;
+        let w=x.measureText(tok).width;
+        if(/^\s+$/.test(tok)){ if(cx>X){ line.push({t:tok,x:cx,f,c}); cx+=w; } return; }
+        if(cx+w>X+Wd && cx>X) flush();
+        if(w>Wd){ for(const ch of tok){ const cw=x.measureText(ch).width; if(cx+cw>X+Wd) flush(); line.push({t:ch,x:cx,f,c}); cx+=cw; } return; }
+        line.push({t:tok,x:cx,f,c}); cx+=w; });
+    });
+    if(line.length) flush();
+    if(pi<paras.length-1) y+=base*.28;
+  });
+  return y-Y;
+}
+
+/* ── 판 그리기: 탭(시나리오 · 파급 설명 · 정보) + 아래 버튼줄 ── */
+function roundR(x,X,Y,w,h,r){ x.beginPath(); if(x.roundRect) x.roundRect(X,Y,w,h,r); else x.rect(X,Y,w,h); }
+function btn(x,id,X,Y,w,h,label,o){ o=o||{}; const hv=XR.hovBtn===id;
+  roundR(x,X,Y,w,h,14); x.fillStyle=o.on?(o.onc||'#2A3550'):(hv?'#26314A':'#1A2231'); x.fill();
+  x.lineWidth=hv?4:2; x.strokeStyle=hv?'#C9D6EE':(o.on?(o.ring||'#6C8FB8'):'#2E3A52'); x.stroke();
+  if(label){ x.fillStyle=o.dis?'#5A6478':(o.fg||'#E6EAF2'); x.font=`${o.b===false?400:600} ${o.fs||34}px ${FF()}`; x.textAlign=o.al||'center'; x.textBaseline='middle';
+    x.fillText(label, o.al==='left'?X+26:X+w/2, Y+h/2+1); x.textAlign='left'; x.textBaseline='alphabetic'; }
+  if(!o.dis) XR.tabBtns.push({id,x0:X,y0:Y,x1:X+w,y1:Y+h,act:o.act}); }
+function drawTablet(){
+  const c=XR.tab3.c, x=c.getContext('2d'), fam=FF(), W2=1024, PX=44;
+  XR.tabBtns=[];
+  x.clearRect(0,0,W2,1024);
+  roundR(x,4,4,W2-8,1016,34); x.fillStyle='rgba(16,21,32,.96)'; x.fill(); x.lineWidth=3; x.strokeStyle='#2E3A52'; x.stroke();
+  x.fillStyle='#8792A8'; x.font=`500 26px ${fam}`; x.fillText('달러 자금 대차대조표 지도 · VR',PX,58);
+  if(XR.msg){ x.fillStyle='#FFB4B4'; x.textAlign='right'; x.fillText(XR.msg,W2-PX,58); x.textAlign='left'; }
+  const tabs=[['scen','시나리오'],['story','파급 설명'],['info','정보']];
+  tabs.forEach(([k,l],i)=>btn(x,'tab:'+k,PX+i*316,82,300,72,l,{on:XR.tab===k,act:()=>{XR.tab=k;XR.scroll=0;}}));
+  const top=184, bot=880;
+  x.save(); x.beginPath(); x.rect(0,top-6,W2,bot-top+6); x.clip();
+  if(XR.tab==='scen') tabScen(x,PX,top,W2-2*PX);
+  else if(XR.tab==='story') tabStory(x,PX,top,W2-2*PX,bot);
+  else tabInfo(x,PX,top,W2-2*PX,bot);
+  x.restore();
+  btn(x,'fed',PX,904,300,84,'백스톱 '+(fedOn?'켜짐':'꺼짐'),{on:fedOn,onc:'#2B2350',ring:'#A78BFA',fs:32,act:()=>{ bFed.click(); }});
+  btn(x,'size',PX+316,904,300,84,XR.mode==='walk'?'크기: 걸어 다니기':'크기: 탁상',{fs:32,act:()=>{ XR.mode=XR.mode==='walk'?'table':'walk'; XR.needPlace=true; }});
+  btn(x,'exit',PX+632,904,304,84,'VR 나가기',{fs:32,fg:'#FFB4B4',act:()=>{ XR.sess&&XR.sess.end(); }});
+  gl.bindTexture(gl.TEXTURE_2D,XR.tab3.t);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c); gl.generateMipmap(gl.TEXTURE_2D);
+  XR.dirty=false;
+}
+function tabScen(x,X,Y,Wd){
+  const cw=(Wd-16)/2, ch=SCEN.length>8?84:104, rg=SCEN.length>8?10:12, nr=Math.ceil(SCEN.length/2);
+  SCEN.forEach((S,i)=>{ const col=i%2, row=Math.floor(i/2), bx=X+col*(cw+16), by=Y+row*(ch+rg);
+    const on=(S.id||S.k)===scen;
+    btn(x,'sc:'+i,bx,by,cw,ch,'',{on,onc:S.id==='normal'?'#1E2A3A':'#3A1A1E',ring:S.id==='normal'?'#6C8FB8':'#FF5C5C',act:()=>{ runScen(i); XR.tab=S.id==='normal'?'scen':'story'; XR.scroll=0; }});
+    x.fillStyle=S.id==='normal'?'#9CC0EA':(/^L1[4-6]/.test(S.k)?'#F2B8DD':'#FF9A8C'); x.font=`600 26px IBM Plex Mono,ui-monospace,monospace`; x.fillText(S.k,bx+22,by+Math.round(ch*.38));
+    x.fillStyle='#E6EAF2'; x.font=`500 29px ${FF()}`;
+    let t=S.t; while(x.measureText(t).width>cw-40 && t.length>4) t=t.slice(0,-2);
+    x.fillText(t===S.t?t:t+'…',bx+22,by+Math.round(ch*.77)); });
+  const S=SCEN.find(s=>(s.id||s.k)===scen), y0=Y+nr*(ch+rg)+14;
+  if(S){ x.fillStyle='#8792A8'; x.font=`500 25px ${FF()}`; x.fillText(S.kind,X,y0+26);
+    drawRich(x,richParas(S.d+'<br>'+S.c),X,y0+70,Wd,27,'#C9D1DE',true); }
+  else { drawRich(x,richParas('직접 고른 진입점 — <b>정보</b> 탭에서 면을 확인하고 충격을 넣는다.'),X,y0+40,Wd,28,'#C9D1DE',true); }
+}
+function tabStory(x,X,Y,Wd,B){
+  if(!story.length){ drawRich(x,richParas('아직 충격이 없다. <b>시나리오</b> 탭에서 하나를 고르거나, 지도에서 면을 가리켜 트리거를 당긴 뒤 <b>정보</b> 탭의 충격 주입을 누른다.'),X,Y+30,Wd,30,'#C9D1DE',true); return; }
+  x.fillStyle='#F2F5FA'; x.font=`600 32px ${FF()}`; x.fillText(storyTitle,X,Y+32);
+  const items=story.slice(0,storyShown).map((e,i)=>({e,i,p:richParas(e.html)}));
+  const iw=Wd-90, base=26, gap=18;
+  items.forEach(it=>{ it.h=drawRich(x,it.p,0,0,iw-30,base,'#C9D1DE',false); });
+  /* 아래(최신)부터 채운다. 스크롤은 항목 단위 */
+  const maxS=Math.max(0,items.length-1); XR.scroll=Math.min(XR.scroll,maxS);
+  let end=items.length-XR.scroll, y=B-10, from=end;
+  while(from>0 && y-items[from-1].h-gap>Y+56){ y-=items[from-1].h+gap; from--; }
+  y=Y+60;
+  for(let k=from;k<end;k++){ const it=items[k], cls=it.e.cls||'';
+    const mc=cls.includes('fedl')?'#A78BFA':cls.includes('xl')?'#E2C47E':cls.includes('sum')?'#9CC0EA':cls.includes('sub')?'#4A5568':'#FF5C5C';
+    x.fillStyle=mc; roundR(x,X,y+4,8,it.h-8,4); x.fill();
+    if(k===storyNew){ x.fillStyle='rgba(255,92,92,.08)'; roundR(x,X+16,y-8,iw-6,it.h+8,10); x.fill(); }
+    drawRich(x,it.p,X+30,y+base,iw-30,base,cls.includes('weak')?'#A3ADC0':'#D5DCE8',true);
+    y+=it.h+gap; }
+  if(storyShown<story.length){ x.fillStyle='#5A6478'; x.font=`400 24px ${FF()}`; x.fillText('… 전파 중',X+30,Math.min(B-8,y+20)); }
+  btn(x,'up',X+Wd-70,Y+56,70,110,'▲',{dis:from<=0,act:()=>{ XR.scroll=Math.min(maxS,XR.scroll+1); }});
+  btn(x,'dn',X+Wd-70,B-120,70,110,'▼',{dis:XR.scroll<=0,act:()=>{ XR.scroll=Math.max(0,XR.scroll-1); }});
+}
+function tabInfo(x,X,Y,Wd,B){
+  const fam=FF();
+  if(sel.startsWith('x:')){ const X2=EXITS[sel.slice(2)];
+    x.fillStyle='#F0CE80'; x.font=`700 44px ${fam}`; x.fillText(X2.name,X,Y+44);
+    x.fillStyle='#9C8A63'; x.font=`400 26px ${fam}`; x.fillText(X2.short+' · '+X2.freq+' · 출구 — 대차대조표가 아니다 · 연결은 [가설]',X,Y+86);
+    drawRich(x,richParas(`<span class="rw"><i>무엇</i>${X2.what}</span><span class="rw"><i>왜 이 다리인가</i>${X2.why}</span><span class="rw"><i>말하지 않는 것</i>${X2.not}</span><span class="rw ev"><i>출처</i>${X2.src}</span>`),X,Y+140,Wd,27,'#C9D1DE',true);
+    return; }
+  if(sel.startsWith('m:')){ const mid=sel.slice(2), M=MACRO[mid], D=L2P[M.y];
+    x.fillStyle='#9FD6E6'; x.font=`700 44px ${fam}`; x.fillText(M.name,X,Y+44);
+    x.fillStyle='#6FA3B3'; x.font=`400 26px ${fam}`; x.fillText(M.short+' · 월 · 2층 거시 타일 — 예측력 검정, 인과 아님',X,Y+86);
+    const rows=CANDS.map(([k,nm])=>`<span class="rw"><i>${nm}</i>h=12 β ${D[k].b[11]>=0?'+':'−'}${Math.abs(D[k].b[11]).toFixed(3)} · p ${D[k].p[11].toFixed(3)} ([주] HC1)</span>`).join('');
+    const tail=M.rep?'<span class="rw"><b>F-L2-1 성립</b> — 네 후보 모두 Holm 후 비유의. "플러밍이 거시에 중요하지 않다"는 뜻이 아니다.</span>':'<span class="rw ev">보조 결과변수 — Holm 가족 밖, 서술용.</span>';
+    drawRich(x,richParas(rows+tail+'<span class="rw ev">빈티지 2026-10-24 · 표본 2013-04~2026-09 · 예측력 ≠ 인과. 반응 경로 그래프는 화면판 패널에 있다.</span>'),X,Y+140,Wd,27,'#C9D1DE',true);
+    return; }
+  const n=NODES[sel];
+  x.fillStyle='#F2F5FA'; x.font=`700 46px ${fam}`; x.fillText(n.name,X,Y+46);
+  x.fillStyle=n.risk?'#E58FC9':'#8792A8'; x.font=`400 26px ${fam}`; x.fillText(n.sub+(n.risk?' · 기준일 2026-10-26 · [가설]':(n.ext?' · 원고 범위 밖 — 해설용':'')),X,Y+88);
+  const cw=(Wd-20)/2; let yy=Y+112;
+  ['dr','cr'].forEach((s,i)=>{ const bx=X+i*(cw+20), on=side===s;
+    roundR(x,bx,yy,cw,250,16); x.fillStyle=on?(s==='dr'?'rgba(125,211,192,.12)':'rgba(232,121,90,.14)'):'#151C2A'; x.fill();
+    x.lineWidth=on?4:2; x.strokeStyle=s==='dr'?'#7DD3C0':'#E8795A'; x.globalAlpha=on?1:.45; x.stroke(); x.globalAlpha=1;
+    x.fillStyle=s==='dr'?'#7DD3C0':'#E8795A'; x.font=`600 28px ${fam}`; x.fillText(FACE[s],bx+20,yy+42);
+    drawRich(x,[n[s].map(t=>({t:'· '+t+'  ',b:false,c:null,z:1}))],bx+20,yy+86,cw-36,25,'#D5DCE8',true);
+    XR.tabBtns.push({id:'side:'+s,x0:bx,y0:yy,x1:bx+cw,y1:yy+250,act:()=>{ setSide(s); refresh(); }});
+  });
+  yy+=270;
+  const L=n.limit, txt=(L?`<span class="hd">병목 · ${L.t}</span><span class="rw ev">${GRADE[L.g][0]}</span>`:'')+(n.rk?`<span class="rw"><i>상태</i>${n.rk.st}</span><span class="rw"><i>주</i>${n.rk.main}</span>`:`<span class="rw">${n.note}</span>`);
+  const h=drawRich(x,richParas(txt),X,yy+30,Wd,26,'#C9D1DE',true);
+  const fy=Math.min(B-96,yy+h+40);
+  btn(x,'fire',X,fy,Wd,90,`${n.name} ${KO(side)}에 충격 주입`,{on:true,onc:'#5A1E22',ring:'#FF5C5C',fg:'#FFE1DC',act:()=>{ fire(); XR.tab='story'; XR.scroll=0; }});
+}
+
+/* ── 지도 놓기: 머리 앞쪽에, 머리가 보는 방향(수평)으로 ── */
+function xrPlace(head){
+  const md=XRMODE[XR.mode], s=md.s, p=head.p, f=head.f;
+  const yaw=Math.atan2(-f[0],-f[2]);
+  XR.Mw=M4.mul(M4.mul(M4.mul(M4.mul(M4.T(p[0],p[1]+md.dy,p[2]),M4.Ry(yaw)),M4.T(0,0,-md.D)),M4.S(s,s,-s)),M4.T(-md.c[0],-md.c[1],-md.c[2]));
+  XR.needPlace=false;
+}
+function summonTablet(head){
+  const f=v3.n([head.f[0],0,head.f[2]]), C=v3.add(v3.add(head.p,v3.k(f,.6)),[0,-.34,0]);
+  const N=v3.n(v3.sub(head.p,C)), R=v3.n(v3.cross([0,1,0],N)), U=v3.cross(N,R);
+  XR.tframe={C,R:v3.k(R,.21),U:v3.k(U,.21),N};
+}
+
+/* ── 레이 맞히기 ── */
+function rayBox(o,d,c,h){ let t0=-1e9,t1=1e9;
+  for(let i=0;i<3;i++){ if(Math.abs(d[i])<1e-9){ if(o[i]<c[i]-h[i]||o[i]>c[i]+h[i]) return null; continue; }
+    let a=(c[i]-h[i]-o[i])/d[i], b=(c[i]+h[i]-o[i])/d[i]; if(a>b){const q=a;a=b;b=q;} t0=Math.max(t0,a); t1=Math.min(t1,b); if(t0>t1) return null; }
+  return t1<0?null:Math.max(0,t0); }
+function xrHit(o,d){
+  /* 판 먼저 */
+  const T=XR.tframe;
+  if(T){ const dn=v3.dot(d,T.N);
+    if(dn<-1e-4){ const t=v3.dot(v3.sub(T.C,o),T.N)/dn;
+      if(t>0){ const p=v3.add(o,v3.k(d,t)), q=v3.sub(p,T.C);
+        const u=v3.dot(q,T.R)/v3.dot(T.R,T.R), w=v3.dot(q,T.U)/v3.dot(T.U,T.U);
+        if(Math.abs(u)<=1&&Math.abs(w)<=1){ const px=(u*.5+.5)*1024, py=(.5-w*.5)*1024;
+          const b=XR.tabBtns.find(b=>px>=b.x0&&px<=b.x1&&py>=b.y0&&py<=b.y1);
+          return {kind:'tab',t,p,btn:b||null}; } } } }
+  /* 지도 */
+  const Mi=M4.inv(XR.Mw), om=M4.p(Mi,o), dmRaw=M4.d(Mi,d), dl=Math.hypot(...dmRaw), dm=dmRaw.map(v=>v/dl);
+  let best=null;
+  Object.keys(NODES).forEach(id=>['dr','cr'].forEach(s=>{ const c=slabCenter(id,s), tm=rayBox(om,dm,[c.x,c.y,c.z],[SW/2,SH/2,SD/2]);
+    if(tm!=null && (!best||tm<best.tm)) best={kind:'face',id,s,tm}; }));
+  Object.entries(EXITS).forEach(([xid,X])=>{ const tm=rayBox(om,dm,[X.pos[0],XY,X.pos[2]],[15,1.6,7]);
+    if(tm!=null && (!best||tm<best.tm)) best={kind:'exit',xid,tm}; });
+  Object.entries(MACRO).forEach(([mid,M])=>{ const tm=rayBox(om,dm,[M.pos[0],MY,M.pos[2]],[14,1.6,7]);
+    if(tm!=null && (!best||tm<best.tm)) best={kind:'macro',mid,tm}; });
+  if(best){ best.t=best.tm/dl; best.p=v3.add(o,v3.k(d,best.t)); }
+  return best;
+}
+function xrSelect(h){
+  if(!h) return;
+  if(h.kind==='tab'){ if(h.btn&&h.btn.act){ h.btn.act(); XR.dirty=true; } return; }
+  if(h.kind==='face'){ sel=h.id; setSide(h.s); infoMode='node';
+    if(scen!=='custom'){ scen='custom'; scenCard(); } XR.tab='info'; refresh(); }
+  if(h.kind==='exit'){ sel='x:'+h.xid; infoMode='node'; XR.tab='info'; refresh(); }
+  if(h.kind==='macro'){ sel='m:'+h.mid; infoMode='node'; XR.tab='info'; refresh(); }
+  XR.dirty=true;
+}
+
+/* ── 상태 갱신: 화면판 startLoop와 같은 규칙, 프레임 간격에 맞춘 감쇠 ── */
+function xrTick(t,dt){
+  if(t>FX.holdUntil){ const k=Math.pow(REDUCED?.90:.975,dt/16.7);
+    Object.keys(heat).forEach(key=>{ if(heat[key]>.004) heat[key]*=k; else heat[key]=0; }); }
+  for(let i=pulses.length-1;i>=0;i--) if(t-pulses[i].t0>pulses[i].dur) pulses.splice(i,1);
+  FX.rings=FX.rings.filter(r=>t-r.t0<r.dur);
+}
+
+/* ── 그리기 ── */
+function xrRender(T,views,heads,rays){
+  const {P,B,S}=XR.prog, R=glR.R, s=xs(), Mw=XR.Mw;
+  const glL=XR.sess.renderState.baseLayer;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,glL.framebuffer);
+  gl.clearColor(BG[0],BG[1],BG[2],1); gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
+  const hov=XR.hov.get('main')||null;
+  const Mi=M4.inv(Mw);
+  views.forEach(view=>{
+    const vp=glL.getViewport(view); gl.viewport(vp.x,vp.y,vp.width,vp.height);
+    const Pm=view.projectionMatrix, V=view.transform.inverse.matrix, VP=M4.mul(Pm,V), MVP=M4.mul(VP,Mw), MV=M4.mul(V,Mw);
+    const eyeP=[view.transform.position.x,view.transform.position.y,view.transform.position.z], eyeM=M4.p(Mi,eyeP);
+
+    /* 메시 */
+    const u=P.u; gl.useProgram(P.p);
+    gl.bindBuffer(gl.ARRAY_BUFFER,glR.vb);
+    gl.enableVertexAttribArray(P.a.pos); gl.vertexAttribPointer(P.a.pos,3,gl.FLOAT,false,32,0);
+    if(P.a.nrm>=0){ gl.enableVertexAttribArray(P.a.nrm); gl.vertexAttribPointer(P.a.nrm,3,gl.FLOAT,false,32,12); }
+    if(P.a.aux>=0){ gl.enableVertexAttribArray(P.a.aux); gl.vertexAttribPointer(P.a.aux,2,gl.FLOAT,false,32,24); }
+    gl.uniform3fv(u.uBg,BG); gl.uniform3f(u.uLight,LIGHT.x,LIGHT.y,LIGHT.z); gl.uniform3fv(u.uEye,eyeM); gl.uniform1f(u.uFogD,230);
+    gl.uniformMatrix4fv(u.uMVP,false,MVP);
+    const d1=(k,mode,col,a,C,Sz,o)=>{ o=o||{};
+      if(o.M){ gl.uniformMatrix4fv(u.uMVP,false,M4.mul(VP,o.M)); gl.uniform1f(u.uFogD,1e6); }
+      gl.uniform1i(u.uMode,mode); gl.uniform4f(u.uCol,col[0],col[1],col[2],a);
+      gl.uniform3fv(u.uC,C||[0,0,0]); gl.uniform3fv(u.uS,Sz||[1,1,1]); gl.uniform3fv(u.uSf,Sz||[1,1,1]);
+      gl.uniform3fv(u.uDash,o.dash||[1,1,0]); gl.uniform1f(u.uEmis,o.em||0); gl.uniform3fv(u.uEmC,o.emc||[0,0,0]);
+      gl.drawArrays(o.lines?gl.LINES:gl.TRIANGLES,R[k].first,R[k].count);
+      if(o.M){ gl.uniformMatrix4fv(u.uMVP,false,MVP); gl.uniform1f(u.uFogD,230); } };
+
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    d1('grid',2,[46/255,58/255,82/255],.8,null,null,{lines:true});
+    d1('drops',2,[120/255,140/255,175/255],.22,null,null,{lines:true});
+    Object.values(NODES).forEach(n=>{ const hgt=(n.pos[1]+76)/134;
+      d1('quad',4,[0,0,0],.46-.22*hgt,[n.pos[0],-75.8,n.pos[2]],[(SW+GAP+3)*(1+.9*hgt),1,(SD+5)*(1+.9*hgt)]);
+      d1('quad',4,[0,0,0],.30,[n.pos[0],-75.75,n.pos[2]],[(SW+GAP)*.55,1,SD*.6]); });
+
+    gl.disable(gl.BLEND); gl.depthMask(true);
+    const HOT=hx(HOT_C);
+    Object.keys(NODES).forEach(id=>['dr','cr'].forEach(sd=>{
+      const key=id+'|'+sd, c=slabCenter(id,sd), h=visHeat(key,T), pk=punch(key,T);
+      const col=hx(h>.02?mix(sd==='dr'?DR_C:CR_C,HOT_C,Math.min(1,h)):(sd==='dr'?DR_C:CR_C));
+      const hv=hov&&hov.kind==='face'&&hov.id===id&&hov.s===sd, picked=(sel===id&&side===sd&&infoMode==='node');
+      const em=h>.02?Math.min(2.4,h*1.5):(hv?1.1:(picked?.7:0));
+      d1('cube',0,col,1,[c.x,c.y,c.z],[SW/2*pk,SH/2*pk,SD/2*pk],{em,emc:h>.02?HOT:[1,1,1]});
+    }));
+    const GOLD=hx(0xD4B36A), GOLDH=hx(0xF0CE80);
+    Object.entries(EXITS).forEach(([xid,X])=>{
+      const hot=exitHit.has(xid), weak=exitWeak.has(xid), on=sel==='x:'+xid, hv=hov&&hov.kind==='exit'&&hov.xid===xid;
+      const k=hot?1:(on||hv?.9:(weak?.7:.5));
+      const xsf=hot?strobe(T-FX.xflash,3,260):(weak?.5*strobe(T-FX.xflash,2,260):0);
+      d1('cube',0,GOLD.map(v=>v*k+BG[0]*(1-k)),1,[X.pos[0],XY,X.pos[2]],[15*(1+.08*xsf),1.3,7*(1+.08*xsf)],{em:(hot?.55:0)+1.6*xsf+(hv?.6:0),emc:GOLDH});
+    });
+    const CYN=hx(0x5FA8BC), CYNH=hx(0xBFE8F3);
+    Object.entries(MACRO).forEach(([mid,M])=>{ const on=sel==='m:'+mid, hv=hov&&hov.kind==='macro'&&hov.mid===mid, k=on||hv?1:.6;
+      d1('cube',0,CYN.map(v=>v*k+BG[0]*(1-k)),1,[M.pos[0],MY,M.pos[2]],[14,1.3,7],{em:(on?.6:0)+(hv?.6:0),emc:CYNH}); });
+
+    gl.enable(gl.BLEND); gl.depthMask(false);
+    d1('quad',3,hx(0xD4B36A),.04,[0,XY-1.4,8],[96,1,26]);
+    LINKS.forEach((L,i)=>{ const idl=L.k==='id';
+      d1('L'+i,1,idl?[108/255,143/255,184/255]:[96/255,110/255,134/255],idl?.85:.7,null,null,{dash:idl?[1,1,0]:[6.5,.5,1]}); });
+    if(fedOn) BACKSTOP.forEach((Bk,i)=>d1('B'+i,1,[167/255,139/255,250/255],.85,null,null,{dash:[5,.55,1]}));
+    if(FX.lit.length){ gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+      LINKS.forEach((L,i)=>{ const a=litOf(i,T); if(a>.02) d1('L'+i,1,[1,.42,.36],Math.min(1,a),null,null,{dash:[1,1,0]}); });
+      gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA); }
+    Object.entries(EXITS).forEach(([xid,X])=>{ const hit=exitHit.has(xid), on=sel==='x:'+xid;
+      X.from.forEach(nid=>{ const hot=exitFirm.has(nid)&&hit, weak=!exitFirm.has(nid)&&exitHitFrom.has(nid)&&(hit||exitWeak.has(xid));
+        d1('X'+xid+'|'+nid,1,hot?[240/255,206/255,128/255]:[212/255,179/255,106/255],hot?.95:(on?.75:(weak?.55:.32)),null,null,{dash:[3.2,.38,1]}); }); });
+    Object.entries(MACRO).forEach(([mid])=>d1('M'+mid,1,[124/255,196/255,216/255],sel==='m:'+mid?.95:.6,null,null,{dash:[4.2,.5,2]}));
+
+    /* 레이 · 손 */
+    rays.forEach(r=>{
+      const len=r.hit?Math.max(.02,r.hit.t):4;
+      d1('cube',5,r.main?[.75,.88,1]:[.55,.6,.7],r.main?.55:.25,[0,0,-len/2],[.0022,.0022,len/2],{M:r.M});
+      if(r.grip) d1('cube',5,[.35,.42,.55],.9,[0,0,.02],[.018,.018,.05],{M:r.grip});
+    });
+    [P.a.pos,P.a.nrm,P.a.aux].forEach(a=>{ if(a>=0) gl.disableVertexAttribArray(a); });
+
+    /* 빛 (가산) */
+    const ub=B.u; gl.useProgram(B.p);
+    gl.bindBuffer(gl.ARRAY_BUFFER,glR.bb); gl.enableVertexAttribArray(B.a.cor); gl.vertexAttribPointer(B.a.cor,2,gl.FLOAT,false,0,0);
+    gl.uniformMatrix4fv(ub.uP,false,Pm); gl.uniformMatrix4fv(ub.uMV,false,MV); gl.uniform1f(ub.uK,s);
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+    const glow=(c,size,col,a,core,push,ring)=>{ gl.uniform3f(ub.uCenter,c.x,c.y,c.z); gl.uniform1f(ub.uSize,size);
+      gl.uniform1f(ub.uPush,push||0); gl.uniform4f(ub.uCol,col[0],col[1],col[2],a); gl.uniform1f(ub.uCore,core||0); gl.uniform1f(ub.uRing,ring||0);
+      gl.drawArrays(gl.TRIANGLES,0,6); };
+    Object.values(NODES).forEach(n=>{ const c=hx(parseInt((n.tone==='#FFFFFF'?'#9AB0D4':n.tone).slice(1),16));
+      glow({x:n.pos[0],y:n.pos[1]-SH/2-3,z:n.pos[2]},SW*1.9,c,.16,0,1); });
+    Object.keys(NODES).forEach(id=>['dr','cr'].forEach(sd=>{ const key=id+'|'+sd, h=Math.min(1,heat[key]), f=flashOf(key,T);
+      if(h>.05) glow(slabCenter(id,sd),SW*1.5,[1,.36,.36],.6*h,0,2);
+      if(f>.03) glow(slabCenter(id,sd),SW*(1.6+1.6*Math.min(1.5,f)),[1,.45,.4],.75*Math.min(1.5,f),.35*Math.min(1,f),3); }));
+    Object.entries(EXITS).forEach(([xid,X])=>{ const c={x:X.pos[0],y:XY,z:X.pos[2]};
+      if(exitHit.has(xid)) glow(c,20+16*strobe(T-FX.xflash,3,260),[.94,.81,.5],.32+.6*strobe(T-FX.xflash,3,260),0,3);
+      else if(exitWeak.has(xid)){ const q=strobe(T-FX.xflash,2,260); if(q>.02) glow(c,18,[.94,.81,.5],.3*q,0,3); } });
+    pulses.forEach(p=>{ const t=(T-p.t0)/p.dur; if(t<0||t>1) return; const amp=Math.max(.45,p.w);
+      for(let k=5;k>=1;k--){ const tk=t-k*.045; if(tk<0) continue; glow(bezP(p,tk),5.5*(1-k*.12),[1,.36,.36],amp*.42*(1-k/6),0,-1); }
+      glow(bezP(p,t),7.5,[1,.4,.36],amp*(.75+.25*Math.sin(t*Math.PI)),1.4,-1); });
+    /* 충격파 고리 — 화면판의 2D 고리를 공간에 세운다 (화면 섬광·흔들림은 멀미 때문에 뺐다) */
+    if(!REDUCED) FX.rings.forEach(r=>{ const dt=T-r.t0; if(dt<0||dt>r.dur) return;
+      const p=dt/r.dur, e=1-Math.pow(1-p,3), rad=2+r.R*e, a=r.amp*Math.pow(1-p,1.4), cc=r.col.split(',').map(v=>+v/255);
+      glow(r.c,rad,cc,a,0,-.5,Math.min(.5,.9/rad+.04)); });
+    /* 판 커서 · 맞힌 점 */
+    gl.uniformMatrix4fv(ub.uMV,false,V); gl.uniform1f(ub.uK,1);
+    rays.forEach(r=>{ if(r.hit) glow({x:r.hit.p[0],y:r.hit.p[1],z:r.hit.p[2]},r.hit.kind==='tab'?.012:.03,[.8,.9,1],r.main?.9:.4,.8,-.004); });
+    gl.disableVertexAttribArray(B.a.cor);
+
+    /* 글자 · 기호 (알파) */
+    gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+    const us=S.u; gl.useProgram(S.p); gl.uniformMatrix4fv(us.uVP,false,VP); gl.uniform1i(us.uTex,0); gl.activeTexture(gl.TEXTURE0);
+    gl.bindBuffer(gl.ARRAY_BUFFER,glR.bb); gl.enableVertexAttribArray(S.a.cor); gl.vertexAttribPointer(S.a.cor,2,gl.FLOAT,false,0,0);
+    const hp=heads.p;
+    const spr=(tex,cm,wd,ht,tint,bg,a,mask)=>{ const C=M4.p(Mw,cm);
+      const f=v3.n(v3.sub(hp,C)), Rr=v3.n(v3.cross([0,1,0],f)), Uu=v3.cross(f,Rr);   /* 눈을 정면으로 본다 — 위·아래에서 봐도 납작해지지 않게 */
+      gl.bindTexture(gl.TEXTURE_2D,tex); gl.uniform3fv(us.uCenter,C); gl.uniform3fv(us.uRight,v3.k(Rr,wd*s/2)); gl.uniform3fv(us.uUp,v3.k(Uu,ht*s/2));
+      gl.uniform3fv(us.uTint,tint); gl.uniform3fv(us.uBgc,bg||[.04,.06,.09]); gl.uniform1f(us.uA,a==null?1:a); gl.uniform1f(us.uMask,mask==null?1:mask);
+      gl.drawArrays(gl.TRIANGLES,0,6); };
+    Object.entries(NODES).forEach(([id,n])=>{
+      const h=Math.min(1.5,Math.max(visHeat(id+'|dr',T),visHeat(id+'|cr',T))), hot=h>.05;
+      const tone=hx(parseInt((n.tone==='#FFFFFF'?'#E6EAF2':n.tone).slice(1),16));
+      const mp=medPos(id,T);
+      spr(XR.tex['m:'+id],[mp.x,mp.y,mp.z],MED_R*2.3,MED_R*2.3,hot?[1,.55,.5]:tone,[.09,.12,.18],1);
+      spr(XR.tex['n:'+id],[n.pos[0],mp.y+MED_R*1.3+3.4,n.pos[2]],26,6.5,hot?[1,.48,.48]:(id===sel?[1,1,1]:[.86,.89,.93]),null,1);
+      ['dr','cr'].forEach(sd=>{ const c=slabCenter(id,sd);
+        spr(XR.tex[sd],[c.x,c.y-SH/2-2.4,c.z-SD/2],9,2.25,sd==='dr'?[.49,.83,.75]:[.91,.47,.35],null,.9); });
+    });
+    Object.entries(EXITS).forEach(([xid,X])=>{ const hot=exitHit.has(xid), on=sel==='x:'+xid;
+      spr(XR.tex['x:'+xid],[X.pos[0],XY+13,X.pos[2]-4],32,8,hot||on?[1,.94,.8]:[.89,.77,.5],null,hot||on?1:.85); });
+    Object.entries(MACRO).forEach(([mid,M])=>{ const on=sel==='m:'+mid;
+      spr(XR.tex['mc:'+mid],[M.pos[0],MY+13,M.pos[2]-4],32,8,on?[.85,.97,1]:[.49,.77,.85],null,on?1:.85); });
+    /* 판 — 깊이 무시하고 맨 위에 */
+    if(XR.tframe){ gl.disable(gl.DEPTH_TEST); const F=XR.tframe;
+      gl.bindTexture(gl.TEXTURE_2D,XR.tab3.t); gl.uniform3fv(us.uCenter,F.C); gl.uniform3fv(us.uRight,F.R); gl.uniform3fv(us.uUp,F.U);
+      gl.uniform3fv(us.uTint,[1,1,1]); gl.uniform1f(us.uA,1); gl.uniform1f(us.uMask,0); gl.drawArrays(gl.TRIANGLES,0,6);
+      /* 판 위 커서는 판보다 위에 */
+      gl.useProgram(B.p); gl.enableVertexAttribArray(B.a.cor); gl.vertexAttribPointer(B.a.cor,2,gl.FLOAT,false,0,0); gl.blendFunc(gl.SRC_ALPHA,gl.ONE);
+      gl.uniformMatrix4fv(ub.uP,false,Pm); gl.uniformMatrix4fv(ub.uMV,false,V); gl.uniform1f(ub.uK,1);
+      rays.forEach(r=>{ if(r.hit&&r.hit.kind==='tab') glow({x:r.hit.p[0],y:r.hit.p[1],z:r.hit.p[2]},.014,[.8,.9,1],1,1,-.002); });
+      gl.disableVertexAttribArray(B.a.cor); gl.enable(gl.DEPTH_TEST); }
+    gl.disableVertexAttribArray(S.a.cor);
+    gl.depthMask(true); gl.disable(gl.BLEND);
+  });
+}
+
+/* ── 프레임 ── */
+function xrFrame(time,frame){
+  const sess=frame.session; if(!XR.on||XR.sess!==sess) return; sess.requestAnimationFrame(xrFrame);
+  const pose=frame.getViewerPose(XR.ref); if(!pose) return;
+  const T=now(), dt=Math.min(100,XR.lastT?T-XR.lastT:16.7); XR.lastT=T;
+  const hm=pose.transform.matrix, head={p:[hm[12],hm[13],hm[14]], f:v3.n([-hm[8],-hm[9],-hm[10]]), r:v3.n([hm[0],hm[1],hm[2]])};
+  if(XR.needPlace||!XR.Mw){ xrPlace(head); if(!XR.tframe) summonTablet(head); XR.dirty=true; }
+  xrTick(T,dt);
+  const sp=XRMODE[XR.mode].sp*dt/1000;
+  /* 입력 */
+  const rays=[]; let main=null;
+  for(const src of sess.inputSources){
+    const rp=frame.getPose(src.targetRaySpace,XR.ref); if(!rp) continue;
+    const gp=src.gripSpace?frame.getPose(src.gripSpace,XR.ref):null;
+    const M=rp.transform.matrix, o=[M[12],M[13],M[14]], d=v3.n([-M[8],-M[9],-M[10]]);
+    const hit=xrHit(o,d), r={src,M,grip:gp&&!src.hand?gp.transform.matrix:null,hit,main:false};
+    rays.push(r); XR.hov.set(src,hit);
+    if(src.handedness==='right'||(!main&&src.handedness!=='left')) main=r;
+    const g=src.gamepad; if(!g) continue;
+    const ax=g.axes.length>=4?g.axes[2]:(g.axes[0]||0), ay=g.axes.length>=4?g.axes[3]:(g.axes[1]||0);
+    const dz=v=>Math.abs(v)<.18?0:v;
+    if(src.handedness==='left'){
+      const fx=dz(ay), sx=dz(ax);
+      if(fx||sx){ const mv=v3.add(v3.k(head.f,-fx*sp),v3.k(head.r,sx*sp)); XR.Mw=M4.mul(M4.T(-mv[0],-mv[1],-mv[2]),XR.Mw); }
+      const pressed=[1,4,5].some(i=>g.buttons[i]&&g.buttons[i].pressed);
+      if(pressed&&!XR.btnHeld.L){ summonTablet(head); XR.dirty=true; } XR.btnHeld.L=pressed;
+    } else {
+      const tx=dz(ax), ty=dz(ay);
+      if(Math.abs(tx)>.65 && !XR.turnHeld){ const th=(tx>0?1:-1)*Math.PI/6; XR.turnHeld=true;
+        XR.Mw=M4.mul(M4.mul(M4.mul(M4.T(head.p[0],0,head.p[2]),M4.Ry(th)),M4.T(-head.p[0],0,-head.p[2])),XR.Mw); }
+      if(Math.abs(tx)<.3) XR.turnHeld=false;
+      if(ty && Math.abs(tx)<.5) XR.Mw=M4.mul(M4.T(0,ty*sp,0),XR.Mw);
+    }
+  }
+  if(!main&&rays.length) main=rays[0];
+  if(main){ main.main=true; XR.hov.set('main',main.hit); }
+  else XR.hov.delete('main');
+  const hb=main&&main.hit&&main.hit.kind==='tab'&&main.hit.btn?main.hit.btn.id:null;
+  if(hb!==XR.hovBtn){ XR.hovBtn=hb; XR.dirty=true; }
+  if(XR.dirty||(storyShown<story.length&&T-(XR.tabAt||0)>400)){ drawTablet(); XR.tabAt=T; }
+  xrRender(T,pose.views,head,rays);
+}
+
+async function xrEnter(){
+  if(XR.on) return;
+  try{
+    if(!GLON) throw new Error('WebGL을 쓸 수 없는 기기');
+    const sess=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','hand-tracking']});
+    XR.sess=sess; XR.on=true;
+    if(gl.makeXRCompatible){ try{ await gl.makeXRCompatible(); }catch(e){ console.warn('makeXRCompatible',e); } }
+    if(!XR.prog) XR.prog=xrPrograms();
+    buildTex();
+    sess.updateRenderState({baseLayer:new XRWebGLLayer(sess,gl,{antialias:true}), depthNear:.03, depthFar:400});
+    try{ XR.ref=await sess.requestReferenceSpace('local-floor'); }catch(e){ XR.ref=await sess.requestReferenceSpace('local'); }
+    XR.needPlace=true; XR.tframe=null; XR.lastT=0; XR.dirty=true;
+    sess.addEventListener('select',e=>{ const h=XR.hov.get(e.inputSource); xrSelect(h); });
+    sess.addEventListener('end',()=>{ XR.on=false; XR.sess=null; gl.bindFramebuffer(gl.FRAMEBUFFER,null); vrBtnState(); resize(); draw(); });
+    sess.requestAnimationFrame(xrFrame);
+  }catch(e){
+    XR.on=false; XR.sess=null; console.warn('VR 시작 실패',e&&e.stack||e);
+    document.getElementById('vrNote').textContent='시작하지 못함 — '+(e&&e.message||e);
+  }
+}
+const bVR=document.getElementById('bVR'), vrNote=document.getElementById('vrNote');
+function vrBtnState(){ bVR.textContent=XR.on?'VR 진행 중':'헤드셋으로 들어가기'; }
+bVR.addEventListener('click',xrEnter);
+(function vrProbe(){
+  const g=document.getElementById('gVR'), quest=/OculusBrowser|Quest|Pico|Wolvic/i.test(navigator.userAgent);
+  const show=(ok,msg)=>{ g.hidden=!(ok||quest); bVR.disabled=!ok; vrNote.innerHTML=msg; };
+  if(!('xr' in navigator)){ show(false,'이 브라우저에는 WebXR이 없다. Quest 브라우저에서 이 페이지를 연다.'); return; }
+  navigator.xr.isSessionSupported('immersive-vr').then(ok=>{
+    show(ok, ok?'오른손 레이 = 가리키기 · 트리거 = 고르기 · 왼손 스틱 = 날기 · 오른손 스틱 = 회전·오르내리기 · 왼손 X/Y = 판 불러오기'
+              :'이 창은 VR 세션을 허용하지 않는다(페이지를 감싼 틀의 권한). 단독 HTML 파일로 열어야 한다.');
+  }).catch(err=>show(false,'이 창은 VR 세션을 허용하지 않는다 — '+(err&&err.name||'권한')+'.'));
+})();
+
+/* ══════════ 시작 ══════════ */
+setSide('cr');
+scenCard();
+refresh();
+resize();
+idleLoop();
+document.fonts && document.fonts.ready.then(resize);
+})();
+</script>
+
+
+
+</body></html>
